@@ -6,6 +6,12 @@ export function hashPassword(password: string): string {
   return `${salt}:${derivedKey}`;
 }
 
+export function verifyPassword(password: string, hashed: string): boolean {
+  const [salt, key] = hashed.split(':');
+  const derivedKey = scryptSync(password, salt, 64).toString('hex');
+  return key === derivedKey;
+}
+
 export function parseDuplicateKeyError(error: any): string | null {
   if (error?.code !== 'ER_DUP_ENTRY') {
     return null;
