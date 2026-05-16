@@ -5,13 +5,56 @@ import { DatabaseService } from '../../../database/database.service';
 export class UserRepository {
   constructor(private readonly db: DatabaseService) {}
 
-  async create(userUuid: string, username: string, email: string, firstName: string, lastName: string, dateOfBirth: string, passwordHash: string) {
+  async create(
+    userUuid: string,
+    username: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    dateOfBirth: string,
+    passwordHash: string | null,
+    googleId: string | null = null,
+    avatarUrl: string | null = null,
+    authProvider: 'local' | 'google' = 'local',
+  ) {
     const sql = `
-      INSERT INTO users (uuid, username, email, first_name, last_name, date_of_birth, password)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (uuid, username, email, first_name, last_name, date_of_birth, password, google_id, avatar_url, auth_provider)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    const params = [userUuid, username, email, firstName, lastName, dateOfBirth, passwordHash];
+    const params = [
+      userUuid,
+      username,
+      email,
+      firstName,
+      lastName,
+      dateOfBirth,
+      passwordHash,
+      googleId,
+      avatarUrl,
+      authProvider,
+    ];
     return await this.db.execute(sql, params);
+  }
+
+  async findByGoogleId(googleId: string) {
+    const sql = 'SELECT * FROM users WHERE google_id = ? LIMIT 1';
+    const users = await this.db.query(sql, [googleId]);
+    return users[0] || null;
+  }
+
+  async updateGoogleId(
+    userUuid: string,
+    googleId: string,
+    avatarUrl: string | null,
+  ) {
+    const sql =
+      'UPDATE users SET google_id = ?, avatar_url = ?, auth_provider = ? WHERE uuid = ?';
+    return await this.db.execute(sql, [
+      googleId,
+      avatarUrl,
+      'google',
+      userUuid,
+    ]);
   }
 
   async findAll() {

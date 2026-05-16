@@ -3,7 +3,8 @@ config();
 
 import { randomBytes } from 'crypto';
 
-const env = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+const env =
+  process.env.NODE_ENV === 'production' ? 'production' : 'development';
 
 if (!process.env.JWT_SECRET && env === 'production') {
   throw new Error('JWT_SECRET environment variable is missing in production!');
@@ -21,9 +22,15 @@ const configuration = {
   },
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3004',
   jwt: {
-    secret: process.env.JWT_SECRET ?? (env === 'development' ? 'secretKey' : randomBytes(32).toString('hex')),
+    secret:
+      process.env.JWT_SECRET ??
+      (env === 'development' ? 'secretKey' : randomBytes(32).toString('hex')),
     accessExpiration: process.env.JWT_ACCESS_EXPIRATION ?? '15m',
     refreshExpiration: process.env.JWT_REFRESH_EXPIRATION ?? '7d',
+  },
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
   },
 } as const;
 

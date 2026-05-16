@@ -18,11 +18,17 @@ export function parseDuplicateKeyError(error: any): string | null {
   }
 
   const message = String(error.sqlMessage || error.message || '');
-  if (message.includes("for key 'users.username'") || message.includes("for key 'username'")) {
+  if (
+    message.includes("for key 'users.username'") ||
+    message.includes("for key 'username'")
+  ) {
     return 'Username already exists';
   }
 
-  if (message.includes("for key 'users.email'") || message.includes("for key 'email'")) {
+  if (
+    message.includes("for key 'users.email'") ||
+    message.includes("for key 'email'")
+  ) {
     return 'Email already exists';
   }
 

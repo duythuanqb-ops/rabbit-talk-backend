@@ -25,6 +25,8 @@ services:
     container_name: ribbittalk
     ports:
       - "${PORT:-3000}:${PORT:-3000}"
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - DB_HOST=mysql
@@ -45,6 +47,8 @@ services:
       dockerfile: Dockerfile
     container_name: ribbittalk_migrate
     command: npm run db:migrate
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - DB_HOST=mysql

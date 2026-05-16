@@ -1,4 +1,15 @@
-import { Controller, Post, UseGuards, Request, Res, Get, UnauthorizedException, Headers, Ip, Body } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  UseGuards,
+  Request,
+  Res,
+  Get,
+  UnauthorizedException,
+  Headers,
+  Ip,
+  Body,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from '../services/auth.service';
 import { LocalAuthGuard } from '../guards/local-auth.guard';
@@ -14,13 +25,17 @@ export class AuthController {
   @Post('login')
   async login(
     @Body() loginDto: LoginDto,
-    @Request() req, 
-    @Res({ passthrough: true }) res: any,
+    @Request() req,
+    @Res({ passthrough: true }) res: Response,
     @Headers('user-agent') userAgent: string,
     @Ip() ip: string,
   ) {
-    const { accessToken, refreshToken, user } = await this.authService.login(req.user, userAgent, ip);
-    
+    const { accessToken, refreshToken, user } = await this.authService.login(
+      req.user,
+      userAgent,
+      ip,
+    );
+
     this.setTokenCookies(res, accessToken, refreshToken);
 
     return {
@@ -29,17 +44,42 @@ export class AuthController {
     };
   }
 
+  @Post('google')
+  async googleLogin(
+    @Body('token') token: string,
+    @Res({ passthrough: true }) res: Response,
+    @Headers('user-agent') userAgent: string,
+    @Ip() ip: string,
+  ) {
+    if (!token) {
+      throw new UnauthorizedException('Token is required');
+    }
+
+    const { accessToken, refreshToken, user } =
+      await this.authService.loginWithGoogle(token, userAgent, ip);
+
+    this.setTokenCookies(res, accessToken, refreshToken);
+
+    return {
+      message: 'Google login successful',
+      user,
+    };
+  }
+
   @Post('refresh')
-  async refresh(@Request() req, @Res({ passthrough: true }) res: any) {
+  async refresh(@Request() req, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies.refresh_token;
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token missing');
     }
 
-    const { accessToken, user } = await this.authService.refreshAccessToken(refreshToken);
-    
+    const { accessToken, user } =
+      await this.authService.refreshAccessToken(refreshToken);
+
     const isProduction = config.nodeEnv === 'production';
-    const isLocalhost = config.frontendUrl.includes('localhost') || config.frontendUrl.includes('127.0.0.1');
+    const isLocalhost =
+      config.frontendUrl.includes('localhost') ||
+      config.frontendUrl.includes('127.0.0.1');
     const secure = isProduction && !isLocalhost;
 
     // We only refresh the access token cookie
@@ -57,7 +97,7 @@ export class AuthController {
   }
 
   @Post('logout')
-  async logout(@Request() req, @Res({ passthrough: true }) res: any) {
+  async logout(@Request() req, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies.refresh_token;
     if (refreshToken) {
       await this.authService.revokeRefreshToken(refreshToken);
@@ -67,10 +107,12 @@ export class AuthController {
     return { message: 'Logged out successfully' };
   }
 
-  private setTokenCookies(res: any, accessToken: string, refreshToken: string) {
+  private setTokenCookies(res: Response, accessToken: string, refreshToken: string) {
     const isProduction = config.nodeEnv === 'production';
-    const isLocalhost = config.frontendUrl.includes('localhost') || config.frontendUrl.includes('127.0.0.1');
-    
+    const isLocalhost =
+      config.frontendUrl.includes('localhost') ||
+      config.frontendUrl.includes('127.0.0.1');
+
     // Secure is true only if in production AND not on localhost
     const secure = isProduction && !isLocalhost;
 

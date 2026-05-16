@@ -10,7 +10,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request: Request) => {
-          return request?.cookies?.access_token;
+          return (request?.cookies?.access_token as string) || null;
         },
       ]),
       ignoreExpiration: false,
@@ -18,7 +18,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
-    return { uuid: payload.sub, username: payload.username, email: payload.email };
+  validate(payload: any) {
+    return {
+      uuid: payload.sub,
+      username: payload.username,
+      email: payload.email,
+    };
   }
 }
