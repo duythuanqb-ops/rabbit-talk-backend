@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/bin/sh
 for f in src/database/migrations/*.sql; do
   name=$(basename "$f")
   echo "====================="
   echo "$name"
-  if mysql -s --skip-ssl -h "$DB_HOST" -P "$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_DATABASE" < "$f" 2>/dev/null; then
+  if mysql -s --skip-ssl -h "$DB_HOST" -P "$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_DATABASE" < "$f"; then
     echo "completed"
   else
     echo "failed"

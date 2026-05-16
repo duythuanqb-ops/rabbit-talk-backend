@@ -32,7 +32,10 @@ export class CreateUserDto {
   @MaxLength(50)
   last_name: string;
 
-  @IsDateString({}, { message: 'date_of_birth must be a valid ISO date (YYYY-MM-DD)' })
+  @IsDateString(
+    {},
+    { message: 'date_of_birth must be a valid ISO date (YYYY-MM-DD)' },
+  )
   date_of_birth: string;
 
   @IsString()

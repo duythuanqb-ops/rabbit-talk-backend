@@ -5,7 +5,13 @@ import { DatabaseService } from '../../../database/database.service';
 export class RefreshTokenRepository {
   constructor(private readonly db: DatabaseService) {}
 
-  async upsert(userUuid: string, token: string, expiresAt: Date, deviceInfo: string, ipAddress: string) {
+  async upsert(
+    userUuid: string,
+    token: string,
+    expiresAt: Date,
+    deviceInfo: string,
+    ipAddress: string,
+  ) {
     const sql = `
       INSERT INTO refresh_tokens (user_uuid, token, expires_at, device_info, ip_address)
       VALUES (?, ?, ?, ?, ?)
@@ -16,7 +22,13 @@ export class RefreshTokenRepository {
         is_revoked = FALSE,
         last_active = CURRENT_TIMESTAMP
     `;
-    await this.db.execute(sql, [userUuid, token, expiresAt, deviceInfo, ipAddress]);
+    await this.db.execute(sql, [
+      userUuid,
+      token,
+      expiresAt,
+      deviceInfo,
+      ipAddress,
+    ]);
   }
 
   async findValidToken(token: string) {

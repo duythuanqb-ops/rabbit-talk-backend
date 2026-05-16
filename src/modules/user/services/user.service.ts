@@ -20,11 +20,14 @@ export class UserService {
         data.first_name,
         data.last_name,
         data.date_of_birth,
-        hashedPassword
+        hashedPassword,
+        null,
+        null,
+        'local',
       );
 
       return {
-        id: (result as any).insertId,
+        id: result.insertId,
         uuid: userUuid,
         ...data,
         password: undefined,
@@ -36,6 +39,66 @@ export class UserService {
       }
       throw error;
     }
+  }
+
+  async createGoogleUser(data: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    googleId: string;
+    avatarUrl?: string;
+  }) {
+    const userUuid = randomUUID();
+    // generate a random username based on email
+    const username =
+      data.email.split('@')[0] + '_' + Math.floor(Math.random() * 10000);
+    // set a default date of birth for google users, e.g. 2000-01-01
+    const dateOfBirth = '2000-01-01';
+
+    try {
+      const result = await this.userRepository.create(
+        userUuid,
+        username,
+        data.email,
+        data.firstName,
+        data.lastName,
+        dateOfBirth,
+        null, // No password for Google users
+        data.googleId,
+        data.avatarUrl || null,
+        'google',
+      );
+
+      return {
+        id: result.insertId,
+        uuid: userUuid,
+        username,
+        email: data.email,
+        first_name: data.firstName,
+        last_name: data.lastName,
+        date_of_birth: dateOfBirth,
+        avatar_url: data.avatarUrl,
+        auth_provider: 'google',
+      };
+    } catch (error: any) {
+      const duplicateMessage = parseDuplicateKeyError(error);
+      if (duplicateMessage) {
+        throw new BadRequestException(duplicateMessage);
+      }
+      throw error;
+    }
+  }
+
+  async findByGoogleId(googleId: string) {
+    return this.userRepository.findByGoogleId(googleId);
+  }
+
+  async updateGoogleId(
+    userUuid: string,
+    googleId: string,
+    avatarUrl: string | null,
+  ) {
+    return this.userRepository.updateGoogleId(userUuid, googleId, avatarUrl);
   }
 
   async findAll() {
