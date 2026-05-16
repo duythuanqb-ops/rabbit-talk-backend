@@ -1,98 +1,74 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# RibbitTalk Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Tài liệu hướng dẫn cài đặt và chạy Backend (NestJS + MySQL + Docker) cho dự án RibbitTalk. Mọi thao tác đều được đóng gói sẵn trong Docker để đảm bảo tính đồng nhất.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 1. Chuẩn bị ban đầu (Setup)
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
-
+**Bước 1: Copy file cấu hình môi trường (.env)**
 ```bash
-$ npm install
+cp .env.example .env
+```
+*(Bạn có thể mở file `.env` lên để xem hoặc sửa thông tin kết nối Database, JWT secret nếu cần).*
+
+**Bước 2: Cài đặt thư viện trên máy gốc (tùy chọn nhưng nên làm)**
+Lệnh này giúp trình soạn thảo (VS Code, WebStorm...) của bạn nhận diện code, không bị báo lỗi đỏ (ví dụ báo thiếu thư viện `helmet`, `class-validator`).
+```bash
+npm install
 ```
 
-## Compile and run the project
+---
 
+## 2. Môi trường Phát triển (Development / Hot-reload)
+
+Khi code tính năng mới, bạn dùng chế độ này. Code sửa xong lưu lại sẽ tự động compile và cập nhật ngay.
+
+**Khởi động Backend (chạy ngầm):**
 ```bash
-# development
-$ npm run start
+docker compose up -d
+```
+*(Nếu là lần đầu chạy, Docker sẽ tự động pull MySQL và build image NestJS).*
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+**Xem log (để biết code có lỗi hay chạy thành công không):**
+```bash
+docker compose logs -f ribbittalk_dev
 ```
 
-## Run tests
-
+**Tắt Backend:**
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+docker compose down
 ```
 
-## Deployment
+---
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## 3. Quản lý Database & Migrations
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Dự án dùng Raw SQL Migration. Khi bạn khởi động Backend bằng `docker compose up -d`, container `ribbittalk_migrate` sẽ tự động chạy các file `.sql` chưa được chạy vào Database.
 
+Tuy nhiên, nếu bạn tạo file `.sql` mới và muốn ép nó chạy ngay lập tức mà không cần khởi động lại toàn bộ docker:
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+docker exec -it ribbittalk_dev npm run db:migrate
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## 4. Môi trường Thực tế (Production)
 
-Check out a few resources that may come in handy when working with NestJS:
+Khi chuẩn bị đưa dự án lên server chạy thật, hoặc bạn muốn kiểm tra bản build cuối cùng.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+**Bước 1: Build Docker Image và Chạy**
+```bash
+docker compose --profile prod up -d --build
+```
+*(Lệnh `--build` bắt buộc Docker phải đóng gói code mới nhất của bạn vào Image thay vì dùng lại cache cũ).*
 
-## Support
+**Bước 2: Xem log Production**
+```bash
+docker compose logs -f ribbittalk_prod
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+**Bước 3: Tắt Production**
+```bash
+docker compose --profile prod down
+```

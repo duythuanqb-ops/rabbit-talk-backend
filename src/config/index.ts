@@ -1,21 +1,38 @@
-import development from './development';
-import production from './production';
+import { config } from 'dotenv';
+config();
 
-const env = process.env.NODE_ENV === 'production' ? 'production' : 'development';
-const baseConfig = env === 'production' ? production : development;
+import { randomBytes } from 'crypto';
 
-const config = {
+const env =
+  process.env.NODE_ENV === 'production' ? 'production' : 'development';
+
+if (!process.env.JWT_SECRET && env === 'production') {
+  throw new Error('JWT_SECRET environment variable is missing in production!');
+}
+
+const configuration = {
   nodeEnv: env,
-  port: Number(process.env.PORT ?? baseConfig.port),
+  port: Number(process.env.PORT ?? 3000),
   db: {
-    host: process.env.DB_HOST ?? baseConfig.db.host,
-    port: Number(process.env.DB_PORT ?? baseConfig.db.port),
-    user: process.env.DB_USER ?? baseConfig.db.user,
-    password: process.env.DB_PASSWORD ?? baseConfig.db.password,
-    database: process.env.DB_DATABASE ?? baseConfig.db.database,
+    host: process.env.DB_HOST ?? 'localhost',
+    port: Number(process.env.DB_PORT ?? 3306),
+    user: process.env.DB_USER ?? 'root',
+    password: process.env.DB_PASSWORD ?? 'root',
+    database: process.env.DB_DATABASE ?? 'ribbittalk',
   },
-  frontendUrl: process.env.FRONTEND_URL ?? baseConfig.frontendUrl,
+  frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3004',
+  jwt: {
+    secret:
+      process.env.JWT_SECRET ??
+      (env === 'development' ? 'secretKey' : randomBytes(32).toString('hex')),
+    accessExpiration: process.env.JWT_ACCESS_EXPIRATION ?? '15m',
+    refreshExpiration: process.env.JWT_REFRESH_EXPIRATION ?? '7d',
+  },
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+  },
 } as const;
 
-export default config;
+export default configuration;
 export const environment = env;
