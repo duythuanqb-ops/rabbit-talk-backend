@@ -5,8 +5,8 @@ import { AppService } from './app.service';
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
-  @Get()
-  getHello(): string {
-    return 'RibbitTalk API is running!';
+  @Get('health')
+  healthCheck() {
+    return this.appService.getHealthStatus();
   }
 }
