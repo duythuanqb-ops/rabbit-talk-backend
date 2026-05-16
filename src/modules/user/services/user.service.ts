@@ -108,4 +108,52 @@ export class UserService {
   async findByEmailOrUsername(identifier: string) {
     return this.userRepository.findByEmailOrUsername(identifier);
   }
+
+  async findByUuid(uuid: string) {
+    return this.userRepository.findByUuid(uuid);
+  }
+
+  /**
+   * Generates a 6-digit OTP, stores it with a 5-minute expiry, and returns the code.
+   */
+  async initiateEmailVerification(uuid: string): Promise<string> {
+    const otp = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    await this.userRepository.setEmailVerificationToken(uuid, otp, expiresAt);
+    return otp;
+  }
+
+  /**
+   * Verifies the OTP submitted by an authenticated user.
+   */
+  async verifyEmailOtp(
+    uuid: string,
+    code: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const user = await this.userRepository.findOtpByUuid(uuid);
+
+    if (!user) {
+      return { success: false, message: 'User not found.' };
+    }
+
+    if (user.is_email_verified) {
+      return { success: false, message: 'Email is already verified.' };
+    }
+
+    if (!user.email_verification_token) {
+      return { success: false, message: 'No verification code found. Please request a new one.' };
+    }
+
+    const expires = new Date(user.email_verification_expires);
+    if (expires < new Date()) {
+      return { success: false, message: 'Verification code has expired. Please request a new one.' };
+    }
+
+    if (user.email_verification_token !== code.trim()) {
+      return { success: false, message: 'Invalid verification code.' };
+    }
+
+    await this.userRepository.markEmailVerified(uuid);
+    return { success: true, message: 'Email verified successfully.' };
+  }
 }

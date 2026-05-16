@@ -5,13 +5,17 @@ import {
   Request,
   Res,
   Get,
+  Header,
+  BadRequestException,
   UnauthorizedException,
   Headers,
   Ip,
   Body,
 } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { AuthService } from '../services/auth.service';
+import { UserService } from '../../user/services/user.service';
+import { MailService } from '../../mail/mail.service';
 import { LocalAuthGuard } from '../guards/local-auth.guard';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { LoginDto } from '../dto/auth.dto';
@@ -19,7 +23,11 @@ import config from '../../../config';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private userService: UserService,
+    private mailService: MailService,
+  ) {}
 
   @UseGuards(LocalAuthGuard)
   @Post('login')
@@ -133,7 +141,47 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('profile')
+  @Header('Cache-Control', 'no-store')
   getProfile(@Request() req) {
-    return req.user;
+    return this.userService.findByUuid(req.user.uuid);
+  }
+
+  /**
+   * POST /auth/send-verification-email
+   * Generates a 6-digit OTP and sends it to the logged-in user's email.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('send-verification-email')
+  async sendVerificationEmail(@Request() req) {
+    const user = await this.userService.findByUuid(req.user.uuid);
+    if (!user) throw new UnauthorizedException('User not found.');
+    if (user.is_email_verified) {
+      throw new BadRequestException('Email is already verified.');
+    }
+
+    const otp = await this.userService.initiateEmailVerification(req.user.uuid);
+    await this.mailService.sendEmailVerification(user.email, otp);
+
+    return { message: 'Verification code sent. Please check your inbox.' };
+  }
+
+  /**
+   * POST /auth/verify-email-otp
+   * Authenticated user submits the 6-digit OTP to verify their email.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('verify-email-otp')
+  async verifyEmailOtp(@Request() req, @Body('code') code: string) {
+    if (!code || code.trim().length !== 6) {
+      throw new BadRequestException('Please enter a valid 6-digit code.');
+    }
+
+    const result = await this.userService.verifyEmailOtp(req.user.uuid, code);
+
+    if (!result.success) {
+      throw new BadRequestException(result.message);
+    }
+
+    return { message: result.message };
   }
 }

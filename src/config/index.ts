@@ -32,6 +32,14 @@ const configuration = {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
   },
+  mail: {
+    host: process.env.MAIL_HOST ?? 'smtp.gmail.com',
+    port: Number(process.env.MAIL_PORT ?? 587),
+    secure: process.env.MAIL_SECURE === 'true', // true for port 465, false for 587
+    user: process.env.MAIL_USER ?? '',
+    pass: process.env.MAIL_PASS ?? '',
+    from: process.env.MAIL_FROM ?? `"RibbitTalk" <noreply@ribbittalk.com>`,
+  },
 } as const;
 
 export default configuration;
