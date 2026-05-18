@@ -1,11 +1,14 @@
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   MinLength,
   MaxLength,
   Matches,
   IsDateString,
+  IsNumber,
+  Min,
 } from 'class-validator';
 
 export class CreateUserDto {
@@ -53,3 +56,39 @@ export class CreateUserResponseDto {
   last_name: string;
   date_of_birth: string;
 }
+
+export class UpdateProfileDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  first_name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  last_name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  bio?: string;
+}
+
+export class RegisterTeacherDto {
+  @IsString()
+  @IsNotEmpty()
+  headline: string;
+
+  @IsNumber()
+  @Min(0)
+  experience_years: number;
+
+  @IsString()
+  @IsOptional()
+  video_intro_url?: string;
+
+  @IsString()
+  @IsOptional()
+  certificates?: string;
+}
+

@@ -40,6 +40,12 @@ const configuration = {
     pass: process.env.MAIL_PASS ?? '',
     from: process.env.MAIL_FROM ?? `"RibbitTalk" <noreply@ribbittalk.com>`,
   },
+  aws: {
+    s3Region: process.env.AWS_S3_REGION ?? '',
+    s3Bucket: process.env.AWS_S3_BUCKET ?? '',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
+  },
 } as const;
 
 export default configuration;

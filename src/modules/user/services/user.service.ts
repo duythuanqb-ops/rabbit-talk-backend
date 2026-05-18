@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, NotFoundException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { CreateUserDto } from '../dto/user.dto';
+import { CreateUserDto, UpdateProfileDto, RegisterTeacherDto } from '../dto/user.dto';
 import { UserRepository } from '../repositories/user.repository';
 import { hashPassword, parseDuplicateKeyError } from '../utils/password.utils';
 
@@ -156,4 +156,35 @@ export class UserService {
     await this.userRepository.markEmailVerified(uuid);
     return { success: true, message: 'Email verified successfully.' };
   }
+
+  async updateProfile(uuid: string, dto: UpdateProfileDto) {
+    await this.userRepository.updateProfile(uuid, {
+      first_name: dto.first_name,
+      last_name: dto.last_name,
+      bio: dto.bio,
+    });
+    return this.userRepository.findByUuid(uuid);
+  }
+
+  async updateAvatar(uuid: string, avatarUrl: string | null) {
+    await this.userRepository.updateAvatar(uuid, avatarUrl);
+    return this.userRepository.findByUuid(uuid);
+  }
+
+  async registerTeacher(uuid: string, dto: RegisterTeacherDto) {
+    const user = await this.userRepository.findByUuid(uuid);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (!user.is_email_verified) {
+      throw new BadRequestException('Email must be verified before registering as a teacher');
+    }
+    if (user.role === 'teacher') {
+      throw new BadRequestException('You are already registered as a teacher');
+    }
+
+    await this.userRepository.registerTeacher(uuid, dto);
+    return { message: 'Successfully registered as a teacher' };
+  }
 }
+

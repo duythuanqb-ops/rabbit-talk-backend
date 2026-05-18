@@ -38,8 +38,8 @@ export class UserRepository {
 
   private readonly publicColumns = [
     'uuid', 'username', 'email', 'first_name', 'last_name',
-    'date_of_birth', 'avatar_url', 'google_id',
-    'auth_provider', 'is_email_verified', 'created_at', 'updated_at',
+    'date_of_birth', 'avatar_url', 'google_id', 'bio',
+    'auth_provider', 'is_email_verified', 'role', 'created_at', 'updated_at',
   ].join(', ');
 
   async findByGoogleId(googleId: string) {
@@ -114,4 +114,89 @@ export class UserRepository {
     `;
     return this.db.execute(sql, [uuid]);
   }
+
+  async updateProfile(
+    uuid: string,
+    fields: { first_name?: string; last_name?: string; bio?: string },
+  ) {
+    const setClauses: string[] = [];
+    const params: any[] = [];
+
+    if (fields.first_name !== undefined) {
+      setClauses.push('first_name = ?');
+      params.push(fields.first_name);
+    }
+    if (fields.last_name !== undefined) {
+      setClauses.push('last_name = ?');
+      params.push(fields.last_name);
+    }
+    if (fields.bio !== undefined) {
+      setClauses.push('bio = ?');
+      params.push(fields.bio);
+    }
+
+    if (setClauses.length === 0) return;
+
+    const sql = `UPDATE users SET ${setClauses.join(', ')} WHERE uuid = ?`;
+    params.push(uuid);
+    return this.db.execute(sql, params);
+  }
+
+  async updateAvatar(uuid: string, avatarUrl: string | null) {
+    const sql = 'UPDATE users SET avatar_url = ? WHERE uuid = ?';
+    return this.db.execute(sql, [avatarUrl, uuid]);
+  }
+
+  async registerTeacher(uuid: string, dto: any) {
+    const sql = `
+      INSERT INTO teacher_profiles (user_uuid, headline, experience_years, video_intro_url, certificates, status)
+      VALUES (?, ?, ?, ?, ?, 'pending')
+      ON DUPLICATE KEY UPDATE 
+        headline = VALUES(headline),
+        experience_years = VALUES(experience_years),
+        video_intro_url = VALUES(video_intro_url),
+        certificates = VALUES(certificates),
+        status = 'pending'
+    `;
+    return this.db.execute(sql, [
+      uuid,
+      dto.headline,
+      dto.experience_years,
+      dto.video_intro_url || null,
+      dto.certificates || null
+    ]);
+  }
+
+  async getTeacherRequests() {
+    const sql = `
+      SELECT 
+        tp.id, tp.headline, tp.experience_years, tp.video_intro_url, tp.certificates, tp.status, tp.created_at,
+        u.uuid, u.email, u.first_name, u.last_name, u.avatar_url
+      FROM teacher_profiles tp
+      JOIN users u ON tp.user_uuid = u.uuid
+      ORDER BY tp.created_at DESC
+    `;
+    return this.db.query(sql);
+  }
+
+  async updateTeacherRequestStatus(uuid: string, status: 'approved' | 'rejected') {
+    const conn = await this.db.getConnection();
+    try {
+      await conn.beginTransaction();
+      
+      await conn.execute('UPDATE teacher_profiles SET status = ? WHERE user_uuid = ?', [status, uuid]);
+      
+      if (status === 'approved') {
+        await conn.execute('UPDATE users SET role = "teacher" WHERE uuid = ?', [uuid]);
+      }
+      
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
+    }
+  }
 }
+
