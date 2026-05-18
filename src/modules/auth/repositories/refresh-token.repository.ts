@@ -33,7 +33,7 @@ export class RefreshTokenRepository {
 
   async findValidToken(token: string) {
     const sql = `
-      SELECT rt.*, u.username, u.email, u.first_name, u.last_name
+      SELECT rt.*, u.username, u.email, u.first_name, u.last_name, u.role
       FROM refresh_tokens rt
       JOIN users u ON rt.user_uuid = u.uuid
       WHERE rt.token = ? AND rt.is_revoked = FALSE AND rt.expires_at > NOW()

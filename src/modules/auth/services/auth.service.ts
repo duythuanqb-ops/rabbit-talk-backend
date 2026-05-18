@@ -36,6 +36,7 @@ export class AuthService {
       username: user.username,
       sub: user.uuid,
       email: user.email,
+      role: user.role ?? 'student',
     };
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: config.jwt.accessExpiration as any,
@@ -55,6 +56,7 @@ export class AuthService {
         email: user.email,
         first_name: user.first_name,
         last_name: user.last_name,
+        role: user.role ?? 'student',
       },
     };
   }
@@ -93,6 +95,7 @@ export class AuthService {
       username: storedToken.username,
       sub: storedToken.user_uuid,
       email: storedToken.email,
+      role: storedToken.role ?? 'student',
     };
 
     return {
@@ -105,6 +108,7 @@ export class AuthService {
         email: storedToken.email,
         first_name: storedToken.first_name,
         last_name: storedToken.last_name,
+        role: storedToken.role ?? 'student',
       },
     };
   }

@@ -1,3 +1,5 @@
+export type UserRole = 'admin' | 'student' | 'teacher';
+
 export class UserEntity {
   id!: number;
   uuid!: string;
@@ -7,6 +9,11 @@ export class UserEntity {
   last_name!: string;
   date_of_birth!: string;
   password!: string;
+  role!: UserRole;
+  is_email_verified!: number;
+  bio?: string | null;
+  avatar_url?: string | null;
+  auth_provider?: string;
   created_at!: string;
   updated_at!: string;
 }

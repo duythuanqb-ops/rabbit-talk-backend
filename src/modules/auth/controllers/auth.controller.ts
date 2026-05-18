@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Patch,
   UseGuards,
   Request,
   Res,
@@ -11,14 +12,19 @@ import {
   Headers,
   Ip,
   Body,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { AuthService } from '../services/auth.service';
 import { UserService } from '../../user/services/user.service';
 import { MailService } from '../../mail/mail.service';
+import { UploadService } from '../../upload/upload.service';
 import { LocalAuthGuard } from '../guards/local-auth.guard';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { LoginDto } from '../dto/auth.dto';
+import { UpdateProfileDto, RegisterTeacherDto } from '../../user/dto/user.dto';
 import config from '../../../config';
 
 @Controller('auth')
@@ -27,6 +33,7 @@ export class AuthController {
     private authService: AuthService,
     private userService: UserService,
     private mailService: MailService,
+    private uploadService: UploadService,
   ) {}
 
   @UseGuards(LocalAuthGuard)
@@ -146,6 +153,34 @@ export class AuthController {
     return this.userService.findByUuid(req.user.uuid);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Patch('profile')
+  async updateProfile(@Request() req, @Body() dto: UpdateProfileDto) {
+    return this.userService.updateProfile(req.user.uuid, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('avatar')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadAvatar(
+    @Request() req,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    const avatarUrl = await this.uploadService.uploadAvatar(file);
+    await this.userService.updateAvatar(req.user.uuid, avatarUrl);
+    return { message: 'Avatar updated successfully', avatar_url: avatarUrl };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('avatar/remove')
+  async removeAvatar(@Request() req) {
+    await this.userService.updateAvatar(req.user.uuid, null);
+    return { message: 'Avatar removed successfully', avatar_url: null };
+  }
+
   /**
    * POST /auth/send-verification-email
    * Generates a 6-digit OTP and sends it to the logged-in user's email.
@@ -184,4 +219,15 @@ export class AuthController {
 
     return { message: result.message };
   }
+
+  /**
+   * POST /auth/teacher/register
+   * Authenticated user registers as a teacher.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('teacher/register')
+  async registerTeacher(@Request() req, @Body() dto: RegisterTeacherDto) {
+    return this.userService.registerTeacher(req.user.uuid, dto);
+  }
 }
+
