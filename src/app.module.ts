@@ -8,6 +8,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { GroupModule } from './modules/group/group.module';
+import { FriendModule } from './modules/friend/friend.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { GroupModule } from './modules/group/group.module';
     DatabaseModule,
     AdminModule,
     GroupModule,
+    FriendModule,
   ],
   controllers: [AppController],
   providers: [AppService],
