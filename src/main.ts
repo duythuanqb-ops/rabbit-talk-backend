@@ -43,5 +43,6 @@ async function bootstrap() {
 
   await app.listen(config.port, '0.0.0.0');
   console.log(`Backend is running on: http://0.0.0.0:${config.port}/api/v1`);
+  console.log(`Friends module successfully loaded.`);
 }
 bootstrap();
