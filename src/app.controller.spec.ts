@@ -14,9 +14,11 @@ describe('AppController', () => {
     appController = app.get<AppController>(AppController);
   });
 
-  describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+  describe('health', () => {
+    it('should return health status', () => {
+      const res = appController.healthCheck();
+      expect(res.status).toBe('ok');
+      expect(res.service).toBe('RibbitTalk API');
     });
   });
 });
