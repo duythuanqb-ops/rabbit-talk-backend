@@ -24,6 +24,20 @@ export class GroupService {
     return this.db.query('SELECT * FROM `groups` WHERE created_by = ? ORDER BY created_at DESC', [teacherId]);
   }
 
+  async getGroupsByStudent(studentId: string) {
+    const sql = `
+      SELECT g.id, g.title, g.description, g.avatar, g.created_at, g.created_by,
+             CONCAT(u.first_name, ' ', u.last_name) as instructor,
+             (SELECT COUNT(*) FROM group_members WHERE group_id = g.id) as members_count
+      FROM group_members gm
+      JOIN \`groups\` g ON gm.group_id = g.id
+      JOIN users u ON g.created_by = u.uuid
+      WHERE gm.user_id = ?
+      ORDER BY gm.joined_at DESC
+    `;
+    return this.db.query(sql, [studentId]);
+  }
+
   async getGroupById(groupId: string) {
     const groups = await this.db.query('SELECT * FROM `groups` WHERE id = ?', [groupId]);
     if (!groups.length) {
@@ -122,10 +136,23 @@ export class GroupService {
     return { success: true, message: 'Member removed' };
   }
 
-  async getGroupMembers(groupId: string, teacherId: string) {
+  async getGroupMembers(groupId: string, userId: string) {
     const group = await this.getGroupById(groupId);
-    if (group.created_by !== teacherId) {
-      throw new ForbiddenException('You can only view members of your own groups');
+    
+    let isAllowed = group.created_by === userId;
+    
+    if (!isAllowed) {
+      const membership = await this.db.query(
+        'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? LIMIT 1',
+        [groupId, userId]
+      );
+      if (membership.length > 0) {
+        isAllowed = true;
+      }
+    }
+
+    if (!isAllowed) {
+      throw new ForbiddenException('You must be a member or teacher of this group to view members');
     }
 
     return this.db.query(

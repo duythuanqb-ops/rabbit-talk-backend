@@ -85,30 +85,37 @@ export class AuthController {
   async refresh(@Request() req, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies.refresh_token;
     if (!refreshToken) {
+      res.clearCookie('access_token');
+      res.clearCookie('refresh_token');
       throw new UnauthorizedException('Refresh token missing');
     }
 
-    const { accessToken, user } =
-      await this.authService.refreshAccessToken(refreshToken);
+    try {
+      const { accessToken, user } =
+        await this.authService.refreshAccessToken(refreshToken);
 
-    const isProduction = config.nodeEnv === 'production';
-    const isLocalhost =
-      config.frontendUrl.includes('localhost') ||
-      config.frontendUrl.includes('127.0.0.1');
-    const secure = isProduction && !isLocalhost;
+      const isProduction = config.nodeEnv === 'production';
+      const isLocalhost =
+        config.frontendUrl.includes('localhost') ||
+        config.frontendUrl.includes('127.0.0.1');
+      const secure = isProduction && !isLocalhost;
 
-    // We only refresh the access token cookie
-    res.cookie('access_token', accessToken, {
-      httpOnly: true,
-      secure: secure,
-      sameSite: 'lax',
-      maxAge: 15 * 60 * 1000, // 15 mins
-    });
+      res.cookie('access_token', accessToken, {
+        httpOnly: true,
+        secure: secure,
+        sameSite: 'lax',
+        maxAge: 15 * 60 * 1000,
+      });
 
-    return {
-      message: 'Token refreshed',
-      user,
-    };
+      return {
+        message: 'Token refreshed',
+        user,
+      };
+    } catch (error) {
+      res.clearCookie('access_token');
+      res.clearCookie('refresh_token');
+      throw new UnauthorizedException('Session expired or invalid');
+    }
   }
 
   @Post('logout')
@@ -128,21 +135,20 @@ export class AuthController {
       config.frontendUrl.includes('localhost') ||
       config.frontendUrl.includes('127.0.0.1');
 
-    // Secure is true only if in production AND not on localhost
     const secure = isProduction && !isLocalhost;
 
     res.cookie('access_token', accessToken, {
       httpOnly: true,
       secure: secure,
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000, // 15 mins
+      maxAge: 15 * 60 * 1000,
     });
 
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
       secure: secure,
       sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
   }
 
@@ -181,10 +187,6 @@ export class AuthController {
     return { message: 'Avatar removed successfully', avatar_url: null };
   }
 
-  /**
-   * POST /auth/send-verification-email
-   * Generates a 6-digit OTP and sends it to the logged-in user's email.
-   */
   @UseGuards(JwtAuthGuard)
   @Post('send-verification-email')
   async sendVerificationEmail(@Request() req) {
@@ -200,10 +202,6 @@ export class AuthController {
     return { message: 'Verification code sent. Please check your inbox.' };
   }
 
-  /**
-   * POST /auth/verify-email-otp
-   * Authenticated user submits the 6-digit OTP to verify their email.
-   */
   @UseGuards(JwtAuthGuard)
   @Post('verify-email-otp')
   async verifyEmailOtp(@Request() req, @Body('code') code: string) {
@@ -220,10 +218,6 @@ export class AuthController {
     return { message: result.message };
   }
 
-  /**
-   * POST /auth/teacher/register
-   * Authenticated user registers as a teacher.
-   */
   @UseGuards(JwtAuthGuard)
   @Post('teacher/register')
   async registerTeacher(@Request() req, @Body() dto: RegisterTeacherDto) {

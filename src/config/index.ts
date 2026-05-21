@@ -1,10 +1,6 @@
-import { config } from 'dotenv';
-config();
-
 import { randomBytes } from 'crypto';
 
-const env =
-  process.env.NODE_ENV === 'production' ? 'production' : 'development';
+const env = process.env.NODE_ENV === 'production' ? 'production' : 'development';
 
 if (!process.env.JWT_SECRET && env === 'production') {
   throw new Error('JWT_SECRET environment variable is missing in production!');
@@ -35,7 +31,7 @@ const configuration = {
   mail: {
     host: process.env.MAIL_HOST ?? 'smtp.gmail.com',
     port: Number(process.env.MAIL_PORT ?? 587),
-    secure: process.env.MAIL_SECURE === 'true', // true for port 465, false for 587
+    secure: process.env.MAIL_SECURE === 'true',
     user: process.env.MAIL_USER ?? '',
     pass: process.env.MAIL_PASS ?? '',
     from: process.env.MAIL_FROM ?? `"RibbitTalk" <noreply@ribbittalk.com>`,
@@ -45,6 +41,13 @@ const configuration = {
     s3Bucket: process.env.AWS_S3_BUCKET ?? '',
     accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
+  },
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY ?? '',
+  },
+  oxford: {
+    appId: process.env.OXFORD_APP_ID ?? '',
+    appKey: process.env.OXFORD_APP_KEY ?? '',
   },
 } as const;
 

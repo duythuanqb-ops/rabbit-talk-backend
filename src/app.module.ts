@@ -9,6 +9,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { GroupModule } from './modules/group/group.module';
 import { FriendModule } from './modules/friend/friend.module';
+import { FlashcardModule } from './modules/flashcard/flashcard.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { FriendModule } from './modules/friend/friend.module';
     AdminModule,
     GroupModule,
     FriendModule,
+    FlashcardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
