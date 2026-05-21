@@ -15,7 +15,7 @@ async function run() {
   
   console.log("Connected to MySQL database successfully.");
   
-  const migrationFile = '20260519000000_create_friendships_table.sql';
+  const migrationFile = '20260519010000_create_flashcards_table.sql';
   const filePath = path.join(__dirname, '../src/database/migrations', migrationFile);
   
   console.log(`Executing migration: ${migrationFile}`);

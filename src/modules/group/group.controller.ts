@@ -43,8 +43,11 @@ export class GroupController {
 
   @Get()
   findAll(@Request() req) {
-    this.checkTeacher(req);
-    return this.groupService.getGroupsByTeacher(req.user.uuid);
+    if (req.user.role === 'teacher' || req.user.role === 'admin') {
+      return this.groupService.getGroupsByTeacher(req.user.uuid);
+    } else {
+      return this.groupService.getGroupsByStudent(req.user.uuid);
+    }
   }
 
   @Get(':id')
@@ -67,7 +70,6 @@ export class GroupController {
 
   @Get(':id/members')
   getMembers(@Request() req, @Param('id') id: string) {
-    this.checkTeacher(req);
     return this.groupService.getGroupMembers(id, req.user.uuid);
   }
 

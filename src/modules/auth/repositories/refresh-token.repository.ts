@@ -36,10 +36,10 @@ export class RefreshTokenRepository {
       SELECT rt.*, u.username, u.email, u.first_name, u.last_name, u.role
       FROM refresh_tokens rt
       JOIN users u ON rt.user_uuid = u.uuid
-      WHERE rt.token = ? AND rt.is_revoked = FALSE AND rt.expires_at > NOW()
+      WHERE rt.token = ? AND rt.is_revoked = FALSE AND rt.expires_at > ?
       LIMIT 1
     `;
-    const results = await this.db.query(sql, [token]);
+    const results = await this.db.query(sql, [token, new Date()]);
     return results[0] || null;
   }
 

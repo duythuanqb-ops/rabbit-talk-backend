@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { NestFactory, Reflector } from '@nestjs/core';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -10,6 +10,7 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
 import config from './config';
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.set('trust proxy', 1);
@@ -42,7 +43,6 @@ async function bootstrap() {
   });
 
   await app.listen(config.port, '0.0.0.0');
-  console.log(`Backend is running on: http://0.0.0.0:${config.port}/api/v1`);
-  console.log(`Friends module successfully loaded.`);
+  logger.log(`Backend is running on: http://0.0.0.0:${config.port}/api/v1`);
 }
 bootstrap();

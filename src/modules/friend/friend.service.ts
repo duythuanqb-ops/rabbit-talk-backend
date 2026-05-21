@@ -1,13 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class FriendService {
   constructor(private readonly db: DatabaseService) {}
 
   async sendFriendRequest(senderUuid: string, receiverIdentifier: string) {
-    // 1. Find the receiver
     const users = await this.db.query(
       'SELECT uuid, username FROM users WHERE username = ? OR email = ? LIMIT 1',
       [receiverIdentifier, receiverIdentifier]
@@ -19,12 +18,9 @@ export class FriendService {
 
     const receiverUuid = users[0].uuid;
 
-    // 2. Cannot add yourself
     if (senderUuid === receiverUuid) {
       throw new BadRequestException('Cannot send a friend request to yourself');
     }
-
-    // 3. Check existing relationship
     const relations = await this.db.query(
       'SELECT * FROM friendships WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?) LIMIT 1',
       [senderUuid, receiverUuid, receiverUuid, senderUuid]
@@ -39,7 +35,6 @@ export class FriendService {
         if (relation.sender_id === senderUuid) {
           throw new BadRequestException('Friend request already sent');
         } else {
-          // The other user sent a request first, so auto-accept it!
           await this.db.execute(
             'UPDATE friendships SET status = "accepted" WHERE id = ?',
             [relation.id]
@@ -48,7 +43,6 @@ export class FriendService {
         }
       }
       if (relation.status === 'declined') {
-        // Update status back to pending, and set current user as sender
         await this.db.execute(
           'UPDATE friendships SET sender_id = ?, receiver_id = ?, status = "pending" WHERE id = ?',
           [senderUuid, receiverUuid, relation.id]
@@ -57,8 +51,7 @@ export class FriendService {
       }
     }
 
-    // 4. Create new friendship record
-    const id = uuidv4();
+    const id = randomUUID();
     await this.db.execute(
       'INSERT INTO friendships (id, sender_id, receiver_id, status) VALUES (?, ?, ?, "pending")',
       [id, senderUuid, receiverUuid]
@@ -91,7 +84,6 @@ export class FriendService {
   }
 
   async respondFriendRequest(userUuid: string, requestId: string, accept: boolean) {
-    // Verify the request exists and the user is the receiver
     const requests = await this.db.query(
       'SELECT * FROM friendships WHERE id = ? AND receiver_id = ? AND status = "pending" LIMIT 1',
       [requestId, userUuid]
@@ -108,7 +100,6 @@ export class FriendService {
       );
       return { success: true, message: 'Friend request accepted' };
     } else {
-      // Remove declined request to allow re-requesting in future
       await this.db.execute('DELETE FROM friendships WHERE id = ?', [requestId]);
       return { success: true, message: 'Friend request declined' };
     }
