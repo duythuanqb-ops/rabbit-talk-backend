@@ -129,7 +129,11 @@ export class AuthController {
     return { message: 'Logged out successfully' };
   }
 
-  private setTokenCookies(res: Response, accessToken: string, refreshToken: string) {
+  private setTokenCookies(
+    res: Response,
+    accessToken: string,
+    refreshToken: string,
+  ) {
     const isProduction = config.nodeEnv === 'production';
     const isLocalhost =
       config.frontendUrl.includes('localhost') ||
@@ -224,4 +228,3 @@ export class AuthController {
     return this.userService.registerTeacher(req.user.uuid, dto);
   }
 }
-

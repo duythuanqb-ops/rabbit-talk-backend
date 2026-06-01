@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import config from '../../../config';
+import { UploadService } from '../../upload/upload.service';
+import { EdgeTTS } from '@andresaya/edge-tts';
+import { GeminiService } from './gemini.service';
 
 export interface FlashcardLookupResult {
   phonetic: string;
@@ -14,13 +16,11 @@ export interface FlashcardLookupResult {
 export class DictionaryService {
   private readonly logger = new Logger(DictionaryService.name);
 
-  /**
-   * Build a complete FlashcardLookupResult for a given English word.
-   * Priority:
-   *   1. Oxford Dictionary API (if credentials are configured)
-   *   2. Free Dictionary API
-   *   3. Oxford Learners website scrape (phonetics / audio only)
-   */
+  constructor(
+    private readonly uploadService: UploadService,
+    private readonly geminiService: GeminiService,
+  ) {}
+
   async lookup(word: string): Promise<FlashcardLookupResult> {
     const result: FlashcardLookupResult = {
       phonetic: '',
@@ -31,93 +31,81 @@ export class DictionaryService {
       audioUrl: '',
     };
 
-    const { appId, appKey } = config.oxford;
-    let fetchedFromOxford = false;
+    const wordCount = word.trim().split(/\s+/).length;
 
-    // 1. Oxford Dictionary API
-    if (appId && appKey) {
-      fetchedFromOxford = await this.tryOxfordApi(word, result);
-    }
+    if (wordCount >= 2) {
+      this.logger.log(
+        `"${word}" has 2 or more words. Using premium Gemini & Microsoft Edge TTS.`,
+      );
 
-    // 2. Free Dictionary API fallback
-    if (!fetchedFromOxford) {
+      const phraseDetails = await this.geminiService.lookupPhrase(word);
+      if (phraseDetails) {
+        result.phonetic = phraseDetails.phonetic;
+        result.meaning = phraseDetails.meaning;
+        result.exampleSentence = phraseDetails.exampleSentence;
+        result.partOfSpeech = 'phrase';
+      } else {
+        this.logger.warn(
+          `Gemini lookup failed for "${word}" (probably 429). Falling back to free translation & composite phonetics.`,
+        );
+        result.meaning = await this.translateToVietnamese(word);
+        result.phonetic = await this.generatePhrasePhonetic(word);
+        result.exampleSentence = `It is important to understand the concept of "${word}".`;
+        result.partOfSpeech = 'phrase';
+      }
+
+      const audioBuffer = await this.generateEdgeTts(word);
+      if (audioBuffer) {
+        result.audioUrl = await this.uploadService.uploadAudio(
+          audioBuffer,
+          `${word}.mp3`,
+        );
+      } else {
+        this.logger.log(
+          `Microsoft Edge TTS failed for "${word}" — falling back to legacy Google Translate TTS`,
+        );
+        result.audioUrl = this.buildGoogleTranslateTtsUrl(word);
+      }
+    } else {
       await this.tryFreeDictionary(word, result);
-    }
 
-    if (!result.meaning) {
-      this.logger.warn(`"${word}" not found in any dictionary — will save without meaning`);
-    }
+      if (!result.meaning) {
+        this.logger.warn(
+          `"${word}" not found in Free Dictionary — will save without meaning`,
+        );
+      }
 
-    // 3. Always attempt Oxford Learners scrape to upgrade phonetics / audio
-    await this.tryOxfordLearnersScrape(word, result);
+      await this.tryCambridgeScrape(word, result);
+
+      result.audioUrl = '';
+      await this.tryOxfordAudio(word, result);
+
+      if (!result.audioUrl) {
+        this.logger.log(
+          `Oxford audio not found for single word "${word}" — attempting Microsoft Edge TTS fallback`,
+        );
+        const audioBuffer = await this.generateEdgeTts(word);
+        if (audioBuffer) {
+          result.audioUrl = await this.uploadService.uploadAudio(
+            audioBuffer,
+            `${word}.mp3`,
+          );
+        } else {
+          this.logger.log(
+            `Microsoft Edge TTS fallback failed for "${word}" — falling back to Google Translate TTS`,
+          );
+          result.audioUrl = this.buildGoogleTranslateTtsUrl(word);
+        }
+      }
+    }
 
     return result;
   }
 
-  // ---------------------------------------------------------------------------
-  // Private: Oxford Dictionary API
-  // ---------------------------------------------------------------------------
-
-  private async tryOxfordApi(word: string, result: FlashcardLookupResult): Promise<boolean> {
-    const { appId, appKey } = config.oxford;
-    try {
-      this.logger.log(`Fetching from Oxford Dictionary API for: ${word}`);
-      const res = await fetch(
-        `https://od-api.oxforddictionaries.com/api/v2/entries/en-gb/${encodeURIComponent(word.toLowerCase())}`,
-        { headers: { app_id: appId, app_key: appKey } },
-      );
-
-      if (!res.ok) {
-        this.logger.log(`Oxford API responded with status ${res.status} for "${word}"`);
-        return false;
-      }
-
-      const data: any = await res.json();
-      const lexicalEntry = data?.results?.[0]?.lexicalEntries?.[0];
-      if (!lexicalEntry) return false;
-
-      result.partOfSpeech = lexicalEntry.lexicalCategory?.id ?? '';
-      const mainEntry = lexicalEntry.entries?.[0];
-      if (!mainEntry) return false;
-
-      // Pronunciation
-      const pron =
-        mainEntry.pronunciations?.find((p: any) => p.phoneticSpelling && p.audioFile) ??
-        mainEntry.pronunciations?.[0];
-      if (pron) {
-        result.phonetic = pron.phoneticSpelling ? `/${pron.phoneticSpelling}/` : '';
-        result.audioUrl = pron.audioFile ?? '';
-      }
-
-      // Best sense: prefer one that has both a definition and an example
-      const bestSense =
-        mainEntry.senses?.find((s: any) => s.definitions?.length && s.examples?.length) ??
-        mainEntry.senses?.[0];
-
-      if (bestSense) {
-        const engDef = bestSense.definitions?.[0] ?? '';
-        result.exampleSentence = bestSense.examples?.[0]?.text ?? '';
-        result.synonyms = (bestSense.synonyms?.slice(0, 4) ?? [])
-          .map((s: any) => s.text)
-          .join(', ');
-        if (engDef) {
-          result.meaning = (await this.translateToVietnamese(word)) || engDef;
-        }
-      }
-
-      this.logger.log(`Oxford Dictionary API: extraction successful for "${word}"`);
-      return true;
-    } catch (e: unknown) {
-      this.logger.log(`Oxford Dictionary API error for "${word}": ${(e as Error).message}`);
-      return false;
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Private: Free Dictionary API
-  // ---------------------------------------------------------------------------
-
-  private async tryFreeDictionary(word: string, result: FlashcardLookupResult): Promise<void> {
+  private async tryFreeDictionary(
+    word: string,
+    result: FlashcardLookupResult,
+  ): Promise<void> {
     try {
       this.logger.log(`Fetching from Free Dictionary API for: ${word}`);
       const res = await fetch(
@@ -129,40 +117,46 @@ export class DictionaryService {
       const entry = data?.[0];
       if (!entry) return;
 
-      // Phonetics
       const phoneticObj =
-        entry.phonetics?.find((p: any) => p.text && p.audio) ?? entry.phonetics?.[0];
-      result.phonetic = phoneticObj?.text ?? entry.phonetic ?? '';
-      result.audioUrl = phoneticObj?.audio ?? '';
+        entry.phonetics?.find((p: any) => !!(p.text && p.audio)) ??
+        entry.phonetics?.[0];
+      result.phonetic = phoneticObj?.text
+        ? String(phoneticObj.text)
+        : entry.phonetic
+          ? String(entry.phonetic)
+          : '';
+      result.audioUrl = phoneticObj?.audio ? String(phoneticObj.audio) : '';
 
-      // Synonyms (deep search)
       const allSynonyms = new Set<string>();
       for (const m of entry.meanings ?? []) {
-        for (const syn of m.synonyms ?? []) allSynonyms.add(syn);
+        for (const syn of m.synonyms ?? []) allSynonyms.add(String(syn));
         for (const def of m.definitions ?? []) {
-          for (const syn of def.synonyms ?? []) allSynonyms.add(syn);
+          for (const syn of def.synonyms ?? []) allSynonyms.add(String(syn));
         }
       }
       result.synonyms = Array.from(allSynonyms).slice(0, 4).join(', ');
 
-      // Best definition + example (prefer definition that has an example)
       let bestDef = '';
       let bestExample = '';
       outer: for (const m of entry.meanings ?? []) {
         for (const d of m.definitions ?? []) {
           if (d.definition && d.example) {
-            bestDef = d.definition;
-            bestExample = d.example;
-            result.partOfSpeech = m.partOfSpeech ?? '';
+            bestDef = String(d.definition);
+            bestExample = String(d.example);
+            result.partOfSpeech = (m.partOfSpeech as string) ?? '';
             break outer;
           }
         }
       }
       if (!bestDef) {
         const firstM = entry.meanings?.[0];
-        result.partOfSpeech = firstM?.partOfSpeech ?? '';
-        bestDef = firstM?.definitions?.[0]?.definition ?? '';
-        bestExample = firstM?.definitions?.[0]?.example ?? '';
+        result.partOfSpeech = (firstM?.partOfSpeech as string) ?? '';
+        bestDef = firstM?.definitions?.[0]?.definition
+          ? String(firstM.definitions[0].definition)
+          : '';
+        bestExample = firstM?.definitions?.[0]?.example
+          ? String(firstM.definitions[0].example)
+          : '';
       }
 
       if (bestDef) {
@@ -170,27 +164,22 @@ export class DictionaryService {
         result.meaning = (await this.translateToVietnamese(word)) || bestDef;
       }
     } catch (e: unknown) {
-      this.logger.log(`Free Dictionary API error for "${word}": ${(e as Error).message}`);
+      this.logger.error(
+        `Free Dictionary API error for "${word}": ${(e as Error).message}`,
+      );
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Private: Oxford Learners scrape (phonetics / audio upgrade)
-  // ---------------------------------------------------------------------------
-
-  private async tryOxfordLearnersScrape(
+  private async tryCambridgeScrape(
     word: string,
     result: FlashcardLookupResult,
   ): Promise<void> {
-    // Skip scraping for multi-word phrases (idioms, proper nouns, phrasal verbs)
-    // Oxford Learners won't have entries for them and the request will just stall.
     const wordCount = word.trim().split(/\s+/).length;
     if (wordCount > 2) return;
 
     try {
-      const url = `https://www.oxfordlearnersdictionaries.com/definition/english/${encodeURIComponent(word.toLowerCase())}`;
+      const url = `https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(word.toLowerCase())}`;
 
-      // 5-second timeout to prevent hanging batch imports
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
@@ -210,19 +199,132 @@ export class DictionaryService {
 
       const html = await res.text();
 
-      const phonMatch = html.match(/<span class="phon">([^<]+)<\/span>/);
-      if (phonMatch) result.phonetic = phonMatch[1];
-
-      const audioMatch = html.match(/data-src-mp3="([^"]+)"/);
-      if (audioMatch) result.audioUrl = audioMatch[1];
+      const ipaMatch = html.match(/class="ipa[^"]*"[^>]*>([\s\S]*?)<\/span>/);
+      if (ipaMatch) {
+        result.phonetic = `/${ipaMatch[1].trim()}/`;
+      }
     } catch (e: unknown) {
-      this.logger.log(`Oxford Learners scrape failed for "${word}": ${(e as Error).message}`);
+      this.logger.error(
+        `Cambridge scrape failed for "${word}": ${(e as Error).message}`,
+      );
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Private: Google Translate (vi)
-  // ---------------------------------------------------------------------------
+  private async tryOxfordAudio(
+    word: string,
+    result: FlashcardLookupResult,
+  ): Promise<void> {
+    const wordCount = word.trim().split(/\s+/).length;
+    if (wordCount > 3) return;
+
+    const base = word.toLowerCase().trim();
+    const uniqueSlugs = [
+      ...new Set([
+        base.replace(/\s+/g, '-'),
+        base.replace(/\s+/g, '_'),
+        encodeURIComponent(base),
+      ]),
+    ];
+
+    for (const slug of uniqueSlugs) {
+      const found = await this.tryOxfordSlug(word, slug, result);
+      if (found) return;
+    }
+  }
+
+  private async tryOxfordSlug(
+    word: string,
+    slug: string,
+    result: FlashcardLookupResult,
+  ): Promise<boolean> {
+    try {
+      this.logger.log(
+        `Scraping Oxford Learner's Dictionary audio for: ${word} (slug: ${slug})`,
+      );
+      const url = `https://www.oxfordlearnersdictionaries.com/definition/english/${slug}`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          Referer: 'https://www.oxfordlearnersdictionaries.com/',
+        },
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        this.logger.log(`Oxford slug "${slug}" returned HTTP ${res.status}`);
+        return false;
+      }
+
+      const html = await res.text();
+
+      const ukMatch =
+        html.match(/class="[^"]*pron-uk[^"]*"[^>]*data-src-mp3="([^"]+)"/) ||
+        html.match(/data-src-mp3="([^"]+)"[^>]*class="[^"]*pron-uk[^"]*"/);
+      if (ukMatch) {
+        let audio = ukMatch[1];
+        if (audio.startsWith('/')) {
+          audio = 'https://www.oxfordlearnersdictionaries.com' + audio;
+        }
+        result.audioUrl = audio;
+        this.logger.log(
+          `Found Oxford UK audio for "${word}" (slug: ${slug}): ${audio}`,
+        );
+        return true;
+      }
+
+      const usMatch =
+        html.match(/class="[^"]*pron-us[^"]*"[^>]*data-src-mp3="([^"]+)"/) ||
+        html.match(/data-src-mp3="([^"]+)"[^>]*class="[^"]*pron-us[^"]*"/);
+      if (usMatch) {
+        let audio = usMatch[1];
+        if (audio.startsWith('/')) {
+          audio = 'https://www.oxfordlearnersdictionaries.com' + audio;
+        }
+        result.audioUrl = audio;
+        this.logger.log(
+          `Found Oxford US audio for "${word}" (slug: ${slug}): ${audio}`,
+        );
+        return true;
+      }
+
+      const anyMp3Match = html.match(/data-src-mp3="([^"]+)"/);
+      if (anyMp3Match) {
+        let audio = anyMp3Match[1];
+        if (audio.startsWith('/')) {
+          audio = 'https://www.oxfordlearnersdictionaries.com' + audio;
+        }
+        result.audioUrl = audio;
+        this.logger.log(
+          `Found Oxford generic audio for "${word}" (slug: ${slug}): ${audio}`,
+        );
+        return true;
+      }
+
+      this.logger.log(`No audio found on Oxford page for slug: ${slug}`);
+      return false;
+    } catch (e: unknown) {
+      this.logger.error(
+        `Oxford scrape failed for slug "${slug}": ${(e as Error).message}`,
+      );
+      return false;
+    }
+  }
+
+  private buildGoogleTranslateTtsUrl(word: string): string {
+    const encoded = encodeURIComponent(word);
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=en&client=tw-ob`;
+    this.logger.log(`Built Google Translate TTS URL for "${word}": ${url}`);
+    return url;
+  }
 
   private async translateToVietnamese(text: string): Promise<string> {
     if (!text) return '';
@@ -230,14 +332,85 @@ export class DictionaryService {
       const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(text)}`;
       const res = await fetch(url);
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as any[][][];
         if (data?.[0]) {
-          return data[0].map((item: any) => item[0]).join('').trim();
+          return data[0]
+            .map((item: any[]) => String(item[0]))
+            .join('')
+            .trim();
         }
       }
     } catch (e: unknown) {
-      this.logger.log(`Translation error for "${text}": ${(e as Error).message}`);
+      this.logger.error(
+        `Translation error for "${text}": ${(e as Error).message}`,
+      );
     }
     return '';
+  }
+
+  private async generateEdgeTts(text: string): Promise<Buffer | null> {
+    try {
+      this.logger.log(
+        `Requesting Microsoft Edge TTS (en-US-AriaNeural) for: "${text}"`,
+      );
+      const tts = new EdgeTTS();
+      await tts.synthesize(text, 'en-US-AriaNeural');
+      const buffer = tts.toBuffer();
+      return buffer;
+    } catch (e: unknown) {
+      this.logger.error(
+        `Microsoft Edge TTS generation failed: ${(e as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  private async generatePhrasePhonetic(phrase: string): Promise<string> {
+    const words = phrase.trim().split(/\s+/);
+    const phonetics: string[] = [];
+
+    for (const w of words) {
+      const cleanWord = w
+        .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
+        .toLowerCase();
+      if (!cleanWord) continue;
+
+      const phonetic = (await this.fetchWordPhonetic(cleanWord)) || cleanWord;
+      phonetics.push(phonetic.replace(/^\/|\/$/g, ''));
+    }
+
+    return phonetics.length > 0 ? `/${phonetics.join(' ')}/` : '';
+  }
+
+  private async fetchWordPhonetic(word: string): Promise<string> {
+    try {
+      const res = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
+      );
+      if (res.ok) {
+        const data: any = await res.json();
+        const entry = data?.[0];
+        const phoneticObj =
+          entry?.phonetics?.find((p: any) => !!(p.text && p.audio)) ??
+          entry?.phonetics?.[0];
+        const text = String(phoneticObj?.text || entry?.phonetic || '');
+        if (text) return text;
+      }
+    } catch (e: unknown) {
+      this.logger.error(
+        `Free Dictionary phonetic fetch failed for "${word}": ${(e as Error).message}`,
+      );
+    }
+
+    const tempResult: FlashcardLookupResult = {
+      phonetic: '',
+      partOfSpeech: '',
+      meaning: '',
+      synonyms: '',
+      exampleSentence: '',
+      audioUrl: '',
+    };
+    await this.tryCambridgeScrape(word, tempResult);
+    return tempResult.phonetic;
   }
 }

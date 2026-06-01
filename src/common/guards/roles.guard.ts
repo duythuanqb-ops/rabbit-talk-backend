@@ -24,7 +24,9 @@ export class RolesGuard implements CanActivate {
 
     const { user } = context.switchToHttp().getRequest();
     if (!user?.role || !requiredRoles.includes(user.role as Role)) {
-      throw new ForbiddenException('You do not have permission to perform this action');
+      throw new ForbiddenException(
+        'You do not have permission to perform this action',
+      );
     }
 
     return true;

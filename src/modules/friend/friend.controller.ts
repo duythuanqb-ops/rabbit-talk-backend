@@ -22,7 +22,10 @@ export class FriendController {
 
   @Post('request')
   async sendRequest(@Request() req, @Body() dto: SendRequestDto) {
-    return await this.friendService.sendFriendRequest(req.user.uuid, dto.receiverIdentifier);
+    return await this.friendService.sendFriendRequest(
+      req.user.uuid,
+      dto.receiverIdentifier,
+    );
   }
 
   @Get('requests/pending')
@@ -36,7 +39,11 @@ export class FriendController {
     @Param('id') requestId: string,
     @Body() dto: RespondRequestDto,
   ) {
-    return await this.friendService.respondFriendRequest(req.user.uuid, requestId, dto.accept);
+    return await this.friendService.respondFriendRequest(
+      req.user.uuid,
+      requestId,
+      dto.accept,
+    );
   }
 
   @Get()

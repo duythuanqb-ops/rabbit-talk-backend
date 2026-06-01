@@ -57,7 +57,11 @@ export class GroupController {
   }
 
   @Patch(':id')
-  update(@Request() req, @Param('id') id: string, @Body() updateGroupDto: UpdateGroupDto) {
+  update(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() updateGroupDto: UpdateGroupDto,
+  ) {
     this.checkTeacher(req);
     return this.groupService.updateGroup(id, req.user.uuid, updateGroupDto);
   }
@@ -74,13 +78,25 @@ export class GroupController {
   }
 
   @Post(':id/members')
-  addMember(@Request() req, @Param('id') id: string, @Body() addMemberDto: AddMemberDto) {
+  addMember(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() addMemberDto: AddMemberDto,
+  ) {
     this.checkTeacher(req);
-    return this.groupService.addMember(id, req.user.uuid, addMemberDto.identifier);
+    return this.groupService.addMember(
+      id,
+      req.user.uuid,
+      addMemberDto.identifier,
+    );
   }
 
   @Delete(':id/members/:userId')
-  removeMember(@Request() req, @Param('id') id: string, @Param('userId') userId: string) {
+  removeMember(
+    @Request() req,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ) {
     this.checkTeacher(req);
     return this.groupService.removeMember(id, req.user.uuid, userId);
   }
@@ -97,7 +113,13 @@ export class GroupController {
       throw new BadRequestException('No file uploaded');
     }
     const avatarUrl = await this.uploadService.uploadAvatar(file);
-    const group = await this.groupService.updateGroup(id, req.user.uuid, { avatar: avatarUrl });
-    return { message: 'Group avatar updated successfully', avatar: avatarUrl, group };
+    const group = await this.groupService.updateGroup(id, req.user.uuid, {
+      avatar: avatarUrl,
+    });
+    return {
+      message: 'Group avatar updated successfully',
+      avatar: avatarUrl,
+      group,
+    };
   }
 }

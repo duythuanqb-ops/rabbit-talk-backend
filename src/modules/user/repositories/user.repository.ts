@@ -37,9 +37,20 @@ export class UserRepository {
   }
 
   private readonly publicColumns = [
-    'uuid', 'username', 'email', 'first_name', 'last_name',
-    'date_of_birth', 'avatar_url', 'google_id', 'bio',
-    'auth_provider', 'is_email_verified', 'role', 'created_at', 'updated_at',
+    'uuid',
+    'username',
+    'email',
+    'first_name',
+    'last_name',
+    'date_of_birth',
+    'avatar_url',
+    'google_id',
+    'bio',
+    'auth_provider',
+    'is_email_verified',
+    'role',
+    'created_at',
+    'updated_at',
   ].join(', ');
 
   async findByGoogleId(googleId: string) {
@@ -163,7 +174,7 @@ export class UserRepository {
       dto.headline,
       dto.experience_years,
       dto.video_intro_url || null,
-      dto.certificates || null
+      dto.certificates || null,
     ]);
   }
 
@@ -179,17 +190,25 @@ export class UserRepository {
     return this.db.query(sql);
   }
 
-  async updateTeacherRequestStatus(uuid: string, status: 'approved' | 'rejected') {
+  async updateTeacherRequestStatus(
+    uuid: string,
+    status: 'approved' | 'rejected',
+  ) {
     const conn = await this.db.getConnection();
     try {
       await conn.beginTransaction();
-      
-      await conn.execute('UPDATE teacher_profiles SET status = ? WHERE user_uuid = ?', [status, uuid]);
-      
+
+      await conn.execute(
+        'UPDATE teacher_profiles SET status = ? WHERE user_uuid = ?',
+        [status, uuid],
+      );
+
       if (status === 'approved') {
-        await conn.execute('UPDATE users SET role = "teacher" WHERE uuid = ?', [uuid]);
+        await conn.execute('UPDATE users SET role = "teacher" WHERE uuid = ?', [
+          uuid,
+        ]);
       }
-      
+
       await conn.commit();
     } catch (e) {
       await conn.rollback();
@@ -199,4 +218,3 @@ export class UserRepository {
     }
   }
 }
-
