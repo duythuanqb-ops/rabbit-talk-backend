@@ -40,7 +40,10 @@ export class FlashcardController {
     if (!file) {
       throw new ForbiddenException('No image file provided.');
     }
-    return this.flashcardService.parseImageWithVision(file.buffer, file.mimetype);
+    return this.flashcardService.parseImageWithVision(
+      file.buffer,
+      file.mimetype,
+    );
   }
 
   @Get()
@@ -64,7 +67,11 @@ export class FlashcardController {
     @Param('setId') setId: string,
     @Body() body: { title: string; description: string },
   ) {
-    return this.flashcardService.updateSet(setId, body.title, body.description ?? '');
+    return this.flashcardService.updateSet(
+      setId,
+      body.title,
+      body.description ?? '',
+    );
   }
 
   @Delete(':setId')

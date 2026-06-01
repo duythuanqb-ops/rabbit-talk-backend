@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -11,17 +16,20 @@ export class GroupService {
   async createGroup(teacherId: string, createGroupDto: CreateGroupDto) {
     const groupId = uuidv4();
     const { title, description, avatar } = createGroupDto;
-    
+
     await this.db.execute(
       'INSERT INTO `groups` (id, title, description, avatar, created_by) VALUES (?, ?, ?, ?, ?)',
-      [groupId, title, description || null, avatar || null, teacherId]
+      [groupId, title, description || null, avatar || null, teacherId],
     );
 
     return this.getGroupById(groupId);
   }
 
   async getGroupsByTeacher(teacherId: string) {
-    return this.db.query('SELECT * FROM `groups` WHERE created_by = ? ORDER BY created_at DESC', [teacherId]);
+    return this.db.query(
+      'SELECT * FROM `groups` WHERE created_by = ? ORDER BY created_at DESC',
+      [teacherId],
+    );
   }
 
   async getGroupsByStudent(studentId: string) {
@@ -39,21 +47,27 @@ export class GroupService {
   }
 
   async getGroupById(groupId: string) {
-    const groups = await this.db.query('SELECT * FROM `groups` WHERE id = ?', [groupId]);
+    const groups = await this.db.query('SELECT * FROM `groups` WHERE id = ?', [
+      groupId,
+    ]);
     if (!groups.length) {
       throw new NotFoundException('Group not found');
     }
     return groups[0];
   }
 
-  async updateGroup(groupId: string, teacherId: string, updateGroupDto: UpdateGroupDto) {
+  async updateGroup(
+    groupId: string,
+    teacherId: string,
+    updateGroupDto: UpdateGroupDto,
+  ) {
     const group = await this.getGroupById(groupId);
     if (group.created_by !== teacherId) {
       throw new ForbiddenException('You can only update your own groups');
     }
 
     const { title, description, avatar } = updateGroupDto;
-    
+
     const updates: string[] = [];
     const params: any[] = [];
 
@@ -74,7 +88,7 @@ export class GroupService {
       params.push(groupId);
       await this.db.execute(
         `UPDATE \`groups\` SET ${updates.join(', ')} WHERE id = ?`,
-        params
+        params,
       );
     }
 
@@ -94,12 +108,14 @@ export class GroupService {
   async addMember(groupId: string, teacherId: string, identifier: string) {
     const group = await this.getGroupById(groupId);
     if (group.created_by !== teacherId) {
-      throw new ForbiddenException('You can only add members to your own groups');
+      throw new ForbiddenException(
+        'You can only add members to your own groups',
+      );
     }
 
     const users = await this.db.query(
       'SELECT uuid FROM users WHERE username = ? OR email = ?',
-      [identifier, identifier]
+      [identifier, identifier],
     );
     if (!users.length) {
       throw new NotFoundException('User with this username or email not found');
@@ -111,7 +127,7 @@ export class GroupService {
       const memberId = uuidv4();
       await this.db.execute(
         'INSERT INTO group_members (id, group_id, user_id) VALUES (?, ?, ?)',
-        [memberId, groupId, userId]
+        [memberId, groupId, userId],
       );
       return { success: true, message: 'Member added' };
     } catch (error: any) {
@@ -125,12 +141,14 @@ export class GroupService {
   async removeMember(groupId: string, teacherId: string, userId: string) {
     const group = await this.getGroupById(groupId);
     if (group.created_by !== teacherId) {
-      throw new ForbiddenException('You can only remove members from your own groups');
+      throw new ForbiddenException(
+        'You can only remove members from your own groups',
+      );
     }
 
     await this.db.execute(
       'DELETE FROM group_members WHERE group_id = ? AND user_id = ?',
-      [groupId, userId]
+      [groupId, userId],
     );
 
     return { success: true, message: 'Member removed' };
@@ -138,13 +156,13 @@ export class GroupService {
 
   async getGroupMembers(groupId: string, userId: string) {
     const group = await this.getGroupById(groupId);
-    
+
     let isAllowed = group.created_by === userId;
-    
+
     if (!isAllowed) {
       const membership = await this.db.query(
         'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? LIMIT 1',
-        [groupId, userId]
+        [groupId, userId],
       );
       if (membership.length > 0) {
         isAllowed = true;
@@ -152,7 +170,9 @@ export class GroupService {
     }
 
     if (!isAllowed) {
-      throw new ForbiddenException('You must be a member or teacher of this group to view members');
+      throw new ForbiddenException(
+        'You must be a member or teacher of this group to view members',
+      );
     }
 
     return this.db.query(
@@ -161,7 +181,7 @@ export class GroupService {
        JOIN users u ON gm.user_id = u.uuid
        WHERE gm.group_id = ?
        ORDER BY gm.joined_at DESC`,
-      [groupId]
+      [groupId],
     );
   }
 }

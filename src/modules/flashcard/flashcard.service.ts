@@ -20,7 +20,10 @@ export class FlashcardService {
     return this.gemini.parseOcrText(text);
   }
 
-  parseImageWithVision(imageBuffer: Buffer, mimeType: string): Promise<string[]> {
+  parseImageWithVision(
+    imageBuffer: Buffer,
+    mimeType: string,
+  ): Promise<string[]> {
     return this.gemini.parseImageWithVision(imageBuffer, mimeType);
   }
 
@@ -74,7 +77,12 @@ export class FlashcardService {
     return this.db.query(sql, [userId, userId]);
   }
 
-  async createSet(teacherId: string, groupId: string, title: string, description: string) {
+  async createSet(
+    teacherId: string,
+    groupId: string,
+    title: string,
+    description: string,
+  ) {
     const id = randomUUID();
     await this.db.execute(
       `INSERT INTO flashcard_sets (id, group_id, teacher_id, title, description) VALUES (?, ?, ?, ?, ?)`,
@@ -128,14 +136,30 @@ export class FlashcardService {
   }
 
   async addFlashcard(setId: string, word: string) {
-    const { phonetic, partOfSpeech, meaning, synonyms, exampleSentence, audioUrl } =
-      await this.dictionary.lookup(word);
+    const {
+      phonetic,
+      partOfSpeech,
+      meaning,
+      synonyms,
+      exampleSentence,
+      audioUrl,
+    } = await this.dictionary.lookup(word);
 
     const id = randomUUID();
     await this.db.execute(
       `INSERT INTO flashcards (id, set_id, word, phonetic, part_of_speech, meaning, synonyms, example_sentence, audio_url)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, setId, word, phonetic, partOfSpeech, meaning, synonyms, exampleSentence, audioUrl],
+      [
+        id,
+        setId,
+        word,
+        phonetic,
+        partOfSpeech,
+        meaning,
+        synonyms,
+        exampleSentence,
+        audioUrl,
+      ],
     );
 
     return {
@@ -164,7 +188,15 @@ export class FlashcardService {
       `UPDATE flashcards
        SET word = ?, phonetic = ?, part_of_speech = ?, meaning = ?, synonyms = ?, example_sentence = ?
        WHERE id = ?`,
-      [word, phonetic, partOfSpeech, meaning, synonyms, exampleSentence, cardId],
+      [
+        word,
+        phonetic,
+        partOfSpeech,
+        meaning,
+        synonyms,
+        exampleSentence,
+        cardId,
+      ],
     );
     return {
       id: cardId,
@@ -186,7 +218,11 @@ export class FlashcardService {
   // Student progress
   // ---------------------------------------------------------------------------
 
-  async updateProgress(studentId: string, flashcardId: string, status: 'learning' | 'mastered') {
+  async updateProgress(
+    studentId: string,
+    flashcardId: string,
+    status: 'learning' | 'mastered',
+  ) {
     const id = randomUUID();
     await this.db.execute(
       `INSERT INTO student_flashcard_progress (id, student_id, flashcard_id, status)

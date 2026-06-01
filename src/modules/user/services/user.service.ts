@@ -1,6 +1,14 @@
-import { BadRequestException, NotFoundException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  Injectable,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { CreateUserDto, UpdateProfileDto, RegisterTeacherDto } from '../dto/user.dto';
+import {
+  CreateUserDto,
+  UpdateProfileDto,
+  RegisterTeacherDto,
+} from '../dto/user.dto';
 import { UserRepository } from '../repositories/user.repository';
 import { hashPassword, parseDuplicateKeyError } from '../utils/password.utils';
 
@@ -141,12 +149,18 @@ export class UserService {
     }
 
     if (!user.email_verification_token) {
-      return { success: false, message: 'No verification code found. Please request a new one.' };
+      return {
+        success: false,
+        message: 'No verification code found. Please request a new one.',
+      };
     }
 
     const expires = new Date(user.email_verification_expires);
     if (expires < new Date()) {
-      return { success: false, message: 'Verification code has expired. Please request a new one.' };
+      return {
+        success: false,
+        message: 'Verification code has expired. Please request a new one.',
+      };
     }
 
     if (user.email_verification_token !== code.trim()) {
@@ -177,7 +191,9 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
     if (!user.is_email_verified) {
-      throw new BadRequestException('Email must be verified before registering as a teacher');
+      throw new BadRequestException(
+        'Email must be verified before registering as a teacher',
+      );
     }
     if (user.role === 'teacher') {
       throw new BadRequestException('You are already registered as a teacher');
@@ -187,4 +203,3 @@ export class UserService {
     return { message: 'Successfully registered as a teacher' };
   }
 }
-

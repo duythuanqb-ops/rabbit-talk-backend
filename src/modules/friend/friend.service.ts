@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
 
@@ -9,7 +13,7 @@ export class FriendService {
   async sendFriendRequest(senderUuid: string, receiverIdentifier: string) {
     const users = await this.db.query(
       'SELECT uuid, username FROM users WHERE username = ? OR email = ? LIMIT 1',
-      [receiverIdentifier, receiverIdentifier]
+      [receiverIdentifier, receiverIdentifier],
     );
 
     if (!users.length) {
@@ -23,7 +27,7 @@ export class FriendService {
     }
     const relations = await this.db.query(
       'SELECT * FROM friendships WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?) LIMIT 1',
-      [senderUuid, receiverUuid, receiverUuid, senderUuid]
+      [senderUuid, receiverUuid, receiverUuid, senderUuid],
     );
 
     if (relations.length > 0) {
@@ -37,27 +41,39 @@ export class FriendService {
         } else {
           await this.db.execute(
             'UPDATE friendships SET status = "accepted" WHERE id = ?',
-            [relation.id]
+            [relation.id],
           );
-          return { success: true, status: 'accepted', message: 'Friend request accepted automatically' };
+          return {
+            success: true,
+            status: 'accepted',
+            message: 'Friend request accepted automatically',
+          };
         }
       }
       if (relation.status === 'declined') {
         await this.db.execute(
           'UPDATE friendships SET sender_id = ?, receiver_id = ?, status = "pending" WHERE id = ?',
-          [senderUuid, receiverUuid, relation.id]
+          [senderUuid, receiverUuid, relation.id],
         );
-        return { success: true, status: 'pending', message: 'Friend request re-sent' };
+        return {
+          success: true,
+          status: 'pending',
+          message: 'Friend request re-sent',
+        };
       }
     }
 
     const id = randomUUID();
     await this.db.execute(
       'INSERT INTO friendships (id, sender_id, receiver_id, status) VALUES (?, ?, ?, "pending")',
-      [id, senderUuid, receiverUuid]
+      [id, senderUuid, receiverUuid],
     );
 
-    return { success: true, status: 'pending', message: 'Friend request sent successfully' };
+    return {
+      success: true,
+      status: 'pending',
+      message: 'Friend request sent successfully',
+    };
   }
 
   async getPendingRequests(userUuid: string) {
@@ -83,24 +99,32 @@ export class FriendService {
     return this.db.query(sql, [userUuid, userUuid, userUuid, userUuid]);
   }
 
-  async respondFriendRequest(userUuid: string, requestId: string, accept: boolean) {
+  async respondFriendRequest(
+    userUuid: string,
+    requestId: string,
+    accept: boolean,
+  ) {
     const requests = await this.db.query(
       'SELECT * FROM friendships WHERE id = ? AND receiver_id = ? AND status = "pending" LIMIT 1',
-      [requestId, userUuid]
+      [requestId, userUuid],
     );
 
     if (!requests.length) {
-      throw new NotFoundException('Friend request not found or already processed');
+      throw new NotFoundException(
+        'Friend request not found or already processed',
+      );
     }
 
     if (accept) {
       await this.db.execute(
         'UPDATE friendships SET status = "accepted" WHERE id = ?',
-        [requestId]
+        [requestId],
       );
       return { success: true, message: 'Friend request accepted' };
     } else {
-      await this.db.execute('DELETE FROM friendships WHERE id = ?', [requestId]);
+      await this.db.execute('DELETE FROM friendships WHERE id = ?', [
+        requestId,
+      ]);
       return { success: true, message: 'Friend request declined' };
     }
   }
@@ -131,14 +155,17 @@ export class FriendService {
     const result = await this.db.execute(
       `DELETE FROM friendships 
        WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))`,
-      [userUuid, friendUuid, friendUuid, userUuid]
+      [userUuid, friendUuid, friendUuid, userUuid],
     );
 
     if (result.affectedRows === 0) {
       throw new NotFoundException('Friendship or friend request not found');
     }
 
-    return { success: true, message: 'Unfriended successfully or request cancelled' };
+    return {
+      success: true,
+      message: 'Unfriended successfully or request cancelled',
+    };
   }
 
   async searchUsers(userUuid: string, query: string) {
@@ -165,11 +192,11 @@ export class FriendService {
       LIMIT 15
     `;
     return this.db.query(sql, [
-      userUuid, 
-      userUuid, 
-      cleanQuery, 
-      cleanQuery, 
-      userUuid
+      userUuid,
+      userUuid,
+      cleanQuery,
+      cleanQuery,
+      userUuid,
     ]);
   }
 }

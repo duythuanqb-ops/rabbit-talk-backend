@@ -10,6 +10,7 @@ import { join } from 'path';
 import { GroupModule } from './modules/group/group.module';
 import { FriendModule } from './modules/friend/friend.module';
 import { FlashcardModule } from './modules/flashcard/flashcard.module';
+import { ExamModule } from './modules/exam/exam.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { FlashcardModule } from './modules/flashcard/flashcard.module';
     GroupModule,
     FriendModule,
     FlashcardModule,
+    ExamModule,
   ],
   controllers: [AppController],
   providers: [AppService],

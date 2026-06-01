@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { NestFactory, Reflector } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
@@ -45,4 +45,4 @@ async function bootstrap() {
   await app.listen(config.port, '0.0.0.0');
   logger.log(`Backend is running on: http://0.0.0.0:${config.port}/api/v1`);
 }
-bootstrap();
+void bootstrap();

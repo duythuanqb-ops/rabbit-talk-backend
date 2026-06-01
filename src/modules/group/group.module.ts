@@ -6,6 +6,6 @@ import { UploadModule } from '../upload/upload.module';
 @Module({
   imports: [UploadModule],
   controllers: [GroupController],
-  providers: [GroupService]
+  providers: [GroupService],
 })
 export class GroupModule {}

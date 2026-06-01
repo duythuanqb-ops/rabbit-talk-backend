@@ -91,4 +91,3 @@ export class RegisterTeacherDto {
   @IsOptional()
   certificates?: string;
 }
-

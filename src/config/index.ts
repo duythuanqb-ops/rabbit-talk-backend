@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 
-const env = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+const env =
+  process.env.NODE_ENV === 'production' ? 'production' : 'development';
 
 if (!process.env.JWT_SECRET && env === 'production') {
   throw new Error('JWT_SECRET environment variable is missing in production!');
@@ -44,10 +45,6 @@ const configuration = {
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY ?? '',
-  },
-  oxford: {
-    appId: process.env.OXFORD_APP_ID ?? '',
-    appKey: process.env.OXFORD_APP_KEY ?? '',
   },
 } as const;
 
