@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS `exams` (
   `teacher_id` varchar(36) NOT NULL,
   `title` varchar(255) NOT NULL,
   `description` text,
+  `is_published` TINYINT(1) DEFAULT 0,
   `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),

@@ -76,6 +76,20 @@ export class ExamController {
     return exam;
   }
 
+  @Put(':id/publish')
+  updatePublishStatus(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body('isPublished') isPublished: boolean,
+  ) {
+    this.checkTeacher(req);
+    return this.examService.updatePublishStatus(
+      id,
+      req.user.uuid as string,
+      isPublished,
+    );
+  }
+
   @Put(':id')
   async updateExam(
     @Request() req: any,
@@ -137,6 +151,8 @@ export class ExamController {
     this.checkTeacher(req);
     return this.examService.deleteExam(id, req.user.uuid as string);
   }
+
+
 
   @Post(':id/submit')
   submitAttempt(

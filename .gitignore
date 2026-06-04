@@ -30,3 +30,4 @@ yarn-error.log*
 # uploads
 /public/img/avatar
 /public/img/avatars
+/public/audio/tts
