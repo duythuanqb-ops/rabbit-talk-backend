@@ -26,6 +26,7 @@ export interface Exam {
   teacher_id: string;
   title: string;
   description: string | null;
+  is_published?: boolean;
   created_at?: string;
   questions: ExamQuestion[];
 }
@@ -402,7 +403,7 @@ export class ExamService {
         FROM exams e
         JOIN \`groups\` g ON e.group_id = g.id
         JOIN group_members gm ON e.group_id = gm.group_id
-        WHERE gm.user_id = ?
+        WHERE gm.user_id = ? AND e.is_published = 1
         ORDER BY e.created_at DESC
       `;
       return this.db.query(sql, [userId, userId, userId]);
@@ -431,7 +432,7 @@ export class ExamService {
                (SELECT COUNT(*) FROM student_exam_attempts WHERE exam_id = e.id AND student_id = ?) as attempt_count,
                (SELECT MAX(score) FROM student_exam_attempts WHERE exam_id = e.id AND student_id = ?) as max_score
         FROM exams e
-        WHERE e.group_id = ?
+        WHERE e.group_id = ? AND e.is_published = 1
         ORDER BY e.created_at DESC
       `;
       return this.db.query(sql, [userId, userId, groupId]);
@@ -476,6 +477,7 @@ export class ExamService {
       teacher_id: exams[0].teacher_id as string,
       title: exams[0].title as string,
       description: exams[0].description || null,
+      is_published: !!exams[0].is_published,
       created_at: exams[0].created_at ? String(exams[0].created_at) : undefined,
       questions,
     };
@@ -565,6 +567,30 @@ export class ExamService {
     }
 
     return this.getExamById(examId);
+  }
+
+  async updatePublishStatus(
+    examId: string,
+    teacherId: string,
+    isPublished: boolean,
+  ) {
+    const exams = await this.db.query(
+      'SELECT teacher_id FROM exams WHERE id = ?',
+      [examId],
+    );
+    if (!exams.length) {
+      throw new NotFoundException('Exam not found');
+    }
+    if (exams[0].teacher_id !== teacherId) {
+      throw new ForbiddenException(
+        'Only the creator of the exam can update publish status',
+      );
+    }
+    await this.db.execute('UPDATE exams SET is_published = ? WHERE id = ?', [
+      isPublished ? 1 : 0,
+      examId,
+    ]);
+    return { success: true, is_published: isPublished };
   }
 
   async enrichListeningAudioUrls() {
