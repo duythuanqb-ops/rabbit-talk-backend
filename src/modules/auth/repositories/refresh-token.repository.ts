@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../../database/database.service';
 

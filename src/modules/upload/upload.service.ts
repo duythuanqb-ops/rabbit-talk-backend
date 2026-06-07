@@ -53,6 +53,35 @@ export class UploadService {
     }
   }
 
+  async uploadCover(file: Express.Multer.File): Promise<string> {
+    const ext = path.extname(file.originalname);
+    const filename = `${uuidv4()}${ext}`;
+
+    if (config.nodeEnv === 'production' && this.s3Client) {
+      const key = `img/covers/${filename}`;
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: config.aws.s3Bucket,
+          Key: key,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+          ACL: 'public-read',
+        }),
+      );
+      return `https://${config.aws.s3Bucket}.s3.${config.aws.s3Region}.amazonaws.com/${key}`;
+    } else {
+      const uploadDir = path.join(process.cwd(), 'public', 'img', 'covers');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      const filePath = path.join(uploadDir, filename);
+      fs.writeFileSync(filePath, file.buffer);
+
+      const port = config.port || 3000;
+      return `http://localhost:${port}/public/img/covers/${filename}`;
+    }
+  }
+
   async uploadAudio(buffer: Buffer, originalname: string): Promise<string> {
     const ext = path.extname(originalname) || '.mp3';
     const filename = `${uuidv4()}${ext}`;

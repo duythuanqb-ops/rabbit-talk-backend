@@ -7,10 +7,14 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { AppService } from './app.service';
+import { DatabaseService } from './database/database.service';
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(
+    private readonly appService: AppService,
+    private readonly db: DatabaseService,
+  ) {}
 
   @Get('health')
   healthCheck() {

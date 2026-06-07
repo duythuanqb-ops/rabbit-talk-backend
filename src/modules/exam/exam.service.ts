@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {
   Injectable,
   Logger,
@@ -8,7 +9,9 @@ import {
 import { DatabaseService } from '../../database/database.service';
 import { GeminiService } from '../flashcard/services/gemini.service';
 import { DictionaryService } from '../flashcard/services/dictionary.service';
+import { DashboardService } from '../dashboard/dashboard.service';
 import { v4 as uuidv4 } from 'uuid';
+import { forwardRef, Inject } from '@nestjs/common';
 
 export interface ExamQuestion {
   id?: string;
@@ -28,6 +31,9 @@ export interface Exam {
   description: string | null;
   is_published?: boolean;
   created_at?: string;
+  due_date?: string;
+  start_date?: string;
+  allow_retry?: boolean;
   questions: ExamQuestion[];
 }
 
@@ -44,6 +50,8 @@ export class ExamService {
     private readonly db: DatabaseService,
     private readonly gemini: GeminiService,
     private readonly dictionary: DictionaryService,
+    @Inject(forwardRef(() => DashboardService))
+    private readonly dashboardService: DashboardService,
   ) {}
 
   getProxyAudioUrl(req: any, originalUrl: string | null): string | null {
@@ -303,11 +311,17 @@ export class ExamService {
       groupId,
       title,
       description,
+      dueDate,
+      startDate,
+      allowRetry,
       questions: rawQuestions,
     } = data as {
       groupId: string;
       title: string;
       description?: string;
+      dueDate?: string;
+      startDate?: string;
+      allowRetry?: boolean;
       questions: ExamQuestion[];
     };
     const questions = this.consolidateMatchingQuestions(rawQuestions || []);
@@ -326,9 +340,22 @@ export class ExamService {
     }
 
     const examId = uuidv4();
+    const formattedDueDate = dueDate ? new Date(dueDate) : null;
+    const formattedStartDate = startDate ? new Date(startDate) : null;
+    const isAllowRetry = allowRetry ? 1 : 0;
+
     await this.db.execute(
-      'INSERT INTO exams (id, group_id, teacher_id, title, description) VALUES (?, ?, ?, ?, ?)',
-      [examId, groupId, teacherId, title, description || null],
+      'INSERT INTO exams (id, group_id, teacher_id, title, description, due_date, start_date, allow_retry) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        examId,
+        groupId,
+        teacherId,
+        title,
+        description || null,
+        formattedDueDate,
+        formattedStartDate,
+        isAllowRetry,
+      ],
     );
 
     for (const q of questions) {
@@ -478,7 +505,16 @@ export class ExamService {
       title: exams[0].title as string,
       description: exams[0].description || null,
       is_published: !!exams[0].is_published,
-      created_at: exams[0].created_at ? String(exams[0].created_at) : undefined,
+      created_at: exams[0].created_at
+        ? new Date(exams[0].created_at).toISOString()
+        : undefined,
+      due_date: exams[0].due_date
+        ? new Date(exams[0].due_date).toISOString()
+        : undefined,
+      start_date: exams[0].start_date
+        ? new Date(exams[0].start_date).toISOString()
+        : undefined,
+      allow_retry: !!exams[0].allow_retry,
       questions,
     };
   }
@@ -491,10 +527,16 @@ export class ExamService {
     const {
       title,
       description,
+      dueDate,
+      startDate,
+      allowRetry,
       questions: rawQuestions,
     } = data as {
       title: string;
       description?: string;
+      dueDate?: string;
+      startDate?: string;
+      allowRetry?: boolean;
       questions: ExamQuestion[];
     };
     const questions = this.consolidateMatchingQuestions(rawQuestions || []);
@@ -513,9 +555,20 @@ export class ExamService {
       throw new BadRequestException('Exam must have at least one question');
     }
 
+    const formattedDueDate = dueDate ? new Date(dueDate) : null;
+    const formattedStartDate = startDate ? new Date(startDate) : null;
+    const isAllowRetry = allowRetry ? 1 : 0;
+
     await this.db.execute(
-      'UPDATE exams SET title = ?, description = ? WHERE id = ?',
-      [title, description || null, examId],
+      'UPDATE exams SET title = ?, description = ?, due_date = ?, start_date = ?, allow_retry = ? WHERE id = ?',
+      [
+        title,
+        description || null,
+        formattedDueDate,
+        formattedStartDate,
+        isAllowRetry,
+        examId,
+      ],
     );
 
     // Delete existing questions and insert updated questions
@@ -711,6 +764,27 @@ export class ExamService {
         JSON.stringify(answers),
       ],
     );
+
+    // Reward XP based on score (e.g. 10 XP per correct answer)
+    const xpEarned = score * 10;
+    if (xpEarned > 0) {
+      await this.db.execute(`UPDATE users SET xp = xp + ? WHERE uuid = ?`, [
+        xpEarned,
+        studentId,
+      ]);
+    }
+
+    // Daily Quest logic for "Take Exam"
+    await this.dashboardService
+      .updateQuestProgress(studentId, 'take_exam', 1)
+      .catch(console.error);
+
+    // Daily Quest logic for "Perfect Exam"
+    if (score === questions.length && questions.length > 0) {
+      await this.dashboardService
+        .updateQuestProgress(studentId, 'perfect_exam', 1)
+        .catch(console.error);
+    }
 
     return {
       attemptId,

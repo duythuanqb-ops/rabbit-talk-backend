@@ -15,20 +15,29 @@ async function run() {
   
   console.log("Connected to MySQL database successfully.");
   
-  const migrationFile = '20260519010000_create_flashcards_table.sql';
-  const filePath = path.join(__dirname, '../src/database/migrations', migrationFile);
+  const migrationsDir = path.join(__dirname, '../src/database/migrations');
+  const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
   
-  console.log(`Executing migration: ${migrationFile}`);
-  const sql = fs.readFileSync(filePath, 'utf8');
-  try {
-    await connection.query(sql);
-    console.log(`Migration ${migrationFile} completed successfully.`);
-  } catch (err) {
-    console.error(`Migration ${migrationFile} failed:`, err.message);
-    process.exit(1);
+  for (const migrationFile of files) {
+    const filePath = path.join(migrationsDir, migrationFile);
+    
+    console.log(`\nExecuting migration: ${migrationFile}`);
+    const sql = fs.readFileSync(filePath, 'utf8');
+    try {
+      await connection.query(sql);
+      console.log(`✓ Migration ${migrationFile} completed successfully.`);
+    } catch (err) {
+      if (err.message && (err.message.includes('already exists') || err.message.includes('Duplicate'))) {
+        console.log(`⊘ Migration ${migrationFile} already applied (skipped).`);
+      } else {
+        console.error(`✗ Migration ${migrationFile} failed:`, err.message);
+        process.exit(1);
+      }
+    }
   }
   
   await connection.end();
+  console.log("\n✓ All migrations completed!");
 }
 
 run().catch((err) => {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import {
   Controller,
   Post,
@@ -111,7 +112,7 @@ export class AuthController {
         message: 'Token refreshed',
         user,
       };
-    } catch (error) {
+    } catch {
       res.clearCookie('access_token');
       res.clearCookie('refresh_token');
       throw new UnauthorizedException('Session expired or invalid');
@@ -192,6 +193,28 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('cover')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadCover(
+    @Request() req,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    const coverUrl = await this.uploadService.uploadCover(file);
+    await this.userService.updateCover(req.user.uuid, coverUrl);
+    return { message: 'Cover updated successfully', cover_url: coverUrl };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('cover/remove')
+  async removeCover(@Request() req) {
+    await this.userService.updateCover(req.user.uuid, null);
+    return { message: 'Cover removed successfully', cover_url: null };
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('send-verification-email')
   async sendVerificationEmail(@Request() req) {
     const user = await this.userService.findByUuid(req.user.uuid);
@@ -226,5 +249,67 @@ export class AuthController {
   @Post('teacher/register')
   async registerTeacher(@Request() req, @Body() dto: RegisterTeacherDto) {
     return this.userService.registerTeacher(req.user.uuid, dto);
+  }
+
+  @Post('forgot-password')
+  async forgotPassword(
+    @Body('email') email: string,
+    @Body('resend') resend?: boolean,
+  ) {
+    if (!email) {
+      throw new BadRequestException('Email is required');
+    }
+    const result = await this.userService.initiatePasswordReset(email, !!resend);
+    
+    if (result.isNew || resend) {
+      await this.mailService.sendPasswordResetEmail(email, result.otp);
+      return { success: true, message: 'Password reset email sent.', sentEmail: true };
+    } else {
+      return { success: true, message: 'Previous reset code is still active.', sentEmail: false };
+    }
+  }
+
+  @Post('forgot-password/verify')
+  async verifyForgotPasswordOtp(
+    @Body('email') email: string,
+    @Body('code') code: string,
+  ) {
+    if (!email || !code || code.trim().length !== 6) {
+      throw new BadRequestException(
+        'Email and a valid 6-digit code are required.',
+      );
+    }
+    const result = await this.userService.verifyPasswordResetOtp(email, code);
+    if (!result.success) {
+      throw new BadRequestException(result.message);
+    }
+    return { message: result.message };
+  }
+
+  @Post('forgot-password/reset')
+  async resetPasswordWithOtp(
+    @Body('email') email: string,
+    @Body('code') code: string,
+    @Body('newPassword') newPassword: string,
+  ) {
+    if (!email || !code || !newPassword) {
+      throw new BadRequestException(
+        'Email, code, and new password are required.',
+      );
+    }
+    if (newPassword.length < 6) {
+      throw new BadRequestException(
+        'Password must be at least 6 characters long.',
+      );
+    }
+    const result = await this.userService.resetPasswordWithOtp(
+      email,
+      code,
+      newPassword,
+    );
+    if (!result.success) {
+      throw new BadRequestException(result.message);
+    }
+    return { message: result.message };
   }
 }

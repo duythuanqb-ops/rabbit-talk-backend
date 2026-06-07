@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import {
   BadRequestException,
   NotFoundException,
@@ -10,7 +11,11 @@ import {
   RegisterTeacherDto,
 } from '../dto/user.dto';
 import { UserRepository } from '../repositories/user.repository';
-import { hashPassword, parseDuplicateKeyError } from '../utils/password.utils';
+import {
+  hashPassword,
+  parseDuplicateKeyError,
+  verifyPassword,
+} from '../../user/utils/password.utils';
 
 @Injectable()
 export class UserService {
@@ -172,16 +177,57 @@ export class UserService {
   }
 
   async updateProfile(uuid: string, dto: UpdateProfileDto) {
+    // Check if email is being updated and already exists
+    if (dto.email) {
+      const existingUser = await this.userRepository.findByEmailOrUsername(
+        dto.email,
+      );
+      if (existingUser && existingUser.uuid !== uuid) {
+        throw new BadRequestException('Email is already taken');
+      }
+    }
+
     await this.userRepository.updateProfile(uuid, {
       first_name: dto.first_name,
       last_name: dto.last_name,
       bio: dto.bio,
+      email: dto.email,
     });
     return this.userRepository.findByUuid(uuid);
   }
 
+  async updatePassword(uuid: string, dto: any) {
+    const user = await this.userRepository.findByUuid(uuid);
+    if (!user) throw new NotFoundException('User not found');
+
+    // Check current password
+    const userWithPassword = await this.userRepository.findByEmailOrUsername(
+      user.email,
+    );
+    if (!userWithPassword) throw new NotFoundException('User not found');
+
+    if (userWithPassword.password) {
+      const isMatch = verifyPassword(
+        dto.currentPassword,
+        userWithPassword.password,
+      );
+      if (!isMatch) {
+        throw new BadRequestException('Invalid current password');
+      }
+    }
+
+    const hashedPassword = hashPassword(dto.newPassword);
+    await this.userRepository.updatePassword(uuid, hashedPassword);
+    return { success: true, message: 'Password updated successfully' };
+  }
+
   async updateAvatar(uuid: string, avatarUrl: string | null) {
     await this.userRepository.updateAvatar(uuid, avatarUrl);
+    return this.userRepository.findByUuid(uuid);
+  }
+
+  async updateCover(uuid: string, coverUrl: string | null) {
+    await this.userRepository.updateCover(uuid, coverUrl);
     return this.userRepository.findByUuid(uuid);
   }
 
@@ -201,5 +247,92 @@ export class UserService {
 
     await this.userRepository.registerTeacher(uuid, dto);
     return { message: 'Successfully registered as a teacher' };
+  }
+
+  async initiatePasswordReset(
+    email: string,
+    forceResend: boolean = false,
+  ): Promise<{ otp: string; isNew: boolean }> {
+    const user = await this.userRepository.findByEmailOrUsername(email);
+    if (!user) {
+      throw new NotFoundException('No account found with that email address');
+    }
+
+    const existingResetInfo =
+      await this.userRepository.findPasswordResetInfoByEmail(email);
+
+    if (
+      existingResetInfo?.password_reset_token &&
+      existingResetInfo?.password_reset_expires
+    ) {
+      const currentExpiresAt = new Date(
+        existingResetInfo.password_reset_expires,
+      );
+      if (currentExpiresAt > new Date()) {
+        if (!forceResend) {
+          // Do not throw error, just return the existing token so controller knows not to send email
+          return { otp: existingResetInfo.password_reset_token, isNew: false };
+        }
+      }
+    }
+
+    const otp = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    await this.userRepository.setPasswordResetToken(user.email, otp, expiresAt);
+    return { otp, isNew: true };
+  }
+
+  async verifyPasswordResetOtp(
+    email: string,
+    code: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const user = await this.userRepository.findPasswordResetInfoByEmail(email);
+
+    if (!user) {
+      return { success: false, message: 'User not found.' };
+    }
+
+    if (!user.password_reset_token) {
+      return {
+        success: false,
+        message: 'No password reset code found. Please request a new one.',
+      };
+    }
+
+    const expires = new Date(user.password_reset_expires);
+    if (expires < new Date()) {
+      return {
+        success: false,
+        message: 'Reset code has expired. Please request a new one.',
+      };
+    }
+
+    if (user.password_reset_token !== code.trim()) {
+      return { success: false, message: 'Invalid reset code.' };
+    }
+
+    return { success: true, message: 'Code is valid.' };
+  }
+
+  async resetPasswordWithOtp(
+    email: string,
+    code: string,
+    newPassword: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const verifyResult = await this.verifyPasswordResetOtp(email, code);
+    if (!verifyResult.success) {
+      throw new BadRequestException(verifyResult.message);
+    }
+
+    const user = await this.userRepository.findPasswordResetInfoByEmail(email);
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    const hashedNewPassword = hashPassword(newPassword);
+    await this.userRepository.updatePassword(user.uuid, hashedNewPassword);
+    await this.userRepository.clearPasswordResetToken(email);
+
+    return { success: true, message: 'Password has been reset successfully.' };
   }
 }

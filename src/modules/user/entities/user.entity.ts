@@ -14,6 +14,9 @@ export class UserEntity {
   bio?: string | null;
   avatar_url?: string | null;
   auth_provider?: string;
+  xp!: number;
+  day_streak!: number;
+  league!: string;
   created_at!: string;
   updated_at!: string;
 }

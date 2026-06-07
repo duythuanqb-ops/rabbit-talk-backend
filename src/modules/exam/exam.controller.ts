@@ -152,8 +152,6 @@ export class ExamController {
     return this.examService.deleteExam(id, req.user.uuid as string);
   }
 
-
-
   @Post(':id/submit')
   submitAttempt(
     @Request() req: any,

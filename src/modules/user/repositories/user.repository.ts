@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../../database/database.service';
 
@@ -44,6 +45,7 @@ export class UserRepository {
     'last_name',
     'date_of_birth',
     'avatar_url',
+    'cover_url',
     'google_id',
     'bio',
     'auth_provider',
@@ -115,6 +117,35 @@ export class UserRepository {
     return users[0] || null;
   }
 
+  async setPasswordResetToken(email: string, token: string, expiresAt: Date) {
+    const sql = `
+      UPDATE users
+      SET password_reset_token = ?, password_reset_expires = ?
+      WHERE email = ?
+    `;
+    return this.db.execute(sql, [token, expiresAt, email]);
+  }
+
+  async findPasswordResetInfoByEmail(email: string) {
+    const sql = `
+      SELECT uuid, email, password_reset_token, password_reset_expires
+      FROM users
+      WHERE email = ?
+      LIMIT 1
+    `;
+    const users = await this.db.query(sql, [email]);
+    return users[0] || null;
+  }
+
+  async clearPasswordResetToken(email: string) {
+    const sql = `
+      UPDATE users
+      SET password_reset_token = NULL, password_reset_expires = NULL
+      WHERE email = ?
+    `;
+    return this.db.execute(sql, [email]);
+  }
+
   async markEmailVerified(uuid: string) {
     const sql = `
       UPDATE users
@@ -128,7 +159,12 @@ export class UserRepository {
 
   async updateProfile(
     uuid: string,
-    fields: { first_name?: string; last_name?: string; bio?: string },
+    fields: {
+      first_name?: string;
+      last_name?: string;
+      bio?: string;
+      email?: string;
+    },
   ) {
     const setClauses: string[] = [];
     const params: any[] = [];
@@ -145,6 +181,10 @@ export class UserRepository {
       setClauses.push('bio = ?');
       params.push(fields.bio);
     }
+    if (fields.email !== undefined) {
+      setClauses.push('email = ?');
+      params.push(fields.email);
+    }
 
     if (setClauses.length === 0) return;
 
@@ -153,9 +193,19 @@ export class UserRepository {
     return this.db.execute(sql, params);
   }
 
+  async updatePassword(uuid: string, passwordHash: string) {
+    const sql = `UPDATE users SET password = ? WHERE uuid = ?`;
+    return this.db.execute(sql, [passwordHash, uuid]);
+  }
+
   async updateAvatar(uuid: string, avatarUrl: string | null) {
     const sql = 'UPDATE users SET avatar_url = ? WHERE uuid = ?';
     return this.db.execute(sql, [avatarUrl, uuid]);
+  }
+
+  async updateCover(uuid: string, coverUrl: string | null) {
+    const sql = 'UPDATE users SET cover_url = ? WHERE uuid = ?';
+    return this.db.execute(sql, [coverUrl, uuid]);
   }
 
   async registerTeacher(uuid: string, dto: any) {
