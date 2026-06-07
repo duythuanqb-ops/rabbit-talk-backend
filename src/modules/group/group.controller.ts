@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {
   Controller,
   Get,
@@ -52,7 +53,6 @@ export class GroupController {
 
   @Get(':id')
   findOne(@Request() req, @Param('id') id: string) {
-    this.checkTeacher(req);
     return this.groupService.getGroupById(id);
   }
 

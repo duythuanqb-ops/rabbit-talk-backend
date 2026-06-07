@@ -16,6 +16,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
+      multipleStatements: true,
     });
   }
 
@@ -24,7 +25,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
-    const [rows] = await this.pool.execute(sql, params);
+    const [rows] = await this.pool.query(sql, params);
     return rows as T[];
   }
 
