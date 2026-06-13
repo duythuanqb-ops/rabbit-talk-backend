@@ -6,6 +6,27 @@ import { RefreshTokenRepository } from '../repositories/refresh-token.repository
 import config from '../../../config';
 import { randomBytes } from 'crypto';
 
+export interface AuthUser {
+  uuid: string;
+  username: string;
+  email: string;
+  role?: string;
+  first_name?: string;
+  last_name?: string;
+  google_id?: string;
+  avatar_url?: string;
+  auth_provider?: string;
+  password?: string;
+  [key: string]: unknown;
+}
+
+interface TokenPayload {
+  username: string;
+  sub: string;
+  email: string;
+  role: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -16,31 +37,33 @@ export class AuthService {
     private readonly refreshTokenRepository: RefreshTokenRepository,
   ) {}
 
-  async validateUser(identifier: string, pass: string): Promise<any> {
+  async validateUser(
+    identifier: string,
+    pass: string,
+  ): Promise<Omit<AuthUser, 'password'>> {
     const user = await this.userService.findByEmailOrUsername(identifier);
 
     if (!user) {
       throw new UnauthorizedException('Email or username does not exist');
     }
 
-    if (!verifyPassword(pass, user.password)) {
+    if (!user.password || !verifyPassword(pass, user.password)) {
       throw new UnauthorizedException('Incorrect password');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...result } = user;
+    const { password: _password, ...result } = user;
     return result;
   }
 
-  async login(user: any, deviceInfo?: string, ipAddress?: string) {
-    const payload = {
+  async login(user: AuthUser, deviceInfo?: string, ipAddress?: string) {
+    const payload: TokenPayload = {
       username: user.username,
       sub: user.uuid,
       email: user.email,
-      role: user.role ?? 'student',
+      role: (user.role as string) ?? 'student',
     };
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: config.jwt.accessExpiration as any,
+      expiresIn: config.jwt.accessExpiration as unknown as number,
     });
     const refreshToken = await this.generateRefreshToken(
       user.uuid,
@@ -55,9 +78,9 @@ export class AuthService {
         uuid: user.uuid,
         username: user.username,
         email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        role: user.role ?? 'student',
+        first_name: user.first_name ?? '',
+        last_name: user.last_name ?? '',
+        role: (user.role as string) ?? 'student',
       },
     };
   }
@@ -92,24 +115,24 @@ export class AuthService {
 
     await this.refreshTokenRepository.updateLastActive(refreshToken);
 
-    const payload = {
-      username: storedToken.username,
+    const payload: TokenPayload = {
+      username: storedToken.username as string,
       sub: storedToken.user_uuid,
-      email: storedToken.email,
-      role: storedToken.role ?? 'student',
+      email: storedToken.email as string,
+      role: (storedToken.role as string) ?? 'student',
     };
 
     return {
       accessToken: this.jwtService.sign(payload, {
-        expiresIn: config.jwt.accessExpiration as any,
+        expiresIn: config.jwt.accessExpiration as unknown as number,
       }),
       user: {
         uuid: storedToken.user_uuid,
-        username: storedToken.username,
-        email: storedToken.email,
-        first_name: storedToken.first_name,
-        last_name: storedToken.last_name,
-        role: storedToken.role ?? 'student',
+        username: storedToken.username as string,
+        email: storedToken.email as string,
+        first_name: storedToken.first_name as string,
+        last_name: storedToken.last_name as string,
+        role: (storedToken.role as string) ?? 'student',
       },
     };
   }
@@ -139,7 +162,13 @@ export class AuthService {
         throw new UnauthorizedException('Invalid Google access token');
       }
 
-      const payload = await response.json();
+      const payload = (await response.json()) as {
+        sub: string;
+        email: string;
+        given_name?: string;
+        family_name?: string;
+        picture?: string;
+      };
 
       if (!payload || !payload.email) {
         throw new UnauthorizedException('Invalid Google token payload');
@@ -165,7 +194,7 @@ export class AuthService {
             picture || null,
           );
           user.google_id = googleId;
-          user.avatar_url = picture;
+          user.avatar_url = picture || null;
           user.auth_provider = 'google';
         } else {
           user = await this.userService.createGoogleUser({
@@ -178,7 +207,7 @@ export class AuthService {
         }
       }
 
-      return this.login(user, deviceInfo, ipAddress);
+      return this.login(user as unknown as AuthUser, deviceInfo, ipAddress);
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;

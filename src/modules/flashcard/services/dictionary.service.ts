@@ -12,6 +12,20 @@ export interface FlashcardLookupResult {
   audioUrl: string;
 }
 
+interface DictionaryEntry {
+  phonetic?: string;
+  phonetics?: { text?: string; audio?: string }[];
+  meanings?: {
+    partOfSpeech?: string;
+    synonyms?: string[];
+    definitions?: {
+      definition?: string;
+      example?: string;
+      synonyms?: string[];
+    }[];
+  }[];
+}
+
 @Injectable()
 export class DictionaryService {
   private readonly logger = new Logger(DictionaryService.name);
@@ -113,12 +127,12 @@ export class DictionaryService {
       );
       if (!res.ok) return;
 
-      const data: any = await res.json();
+      const data = (await res.json()) as DictionaryEntry[];
       const entry = data?.[0];
       if (!entry) return;
 
       const phoneticObj =
-        entry.phonetics?.find((p: any) => !!(p.text && p.audio)) ??
+        entry.phonetics?.find((p) => !!(p.text && p.audio)) ??
         entry.phonetics?.[0];
       result.phonetic = phoneticObj?.text
         ? String(phoneticObj.text)
@@ -332,10 +346,10 @@ export class DictionaryService {
       const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(text)}`;
       const res = await fetch(url);
       if (res.ok) {
-        const data = (await res.json()) as any[][][];
+        const data = (await res.json()) as unknown[][][];
         if (data?.[0]) {
           return data[0]
-            .map((item: any[]) => String(item[0]))
+            .map((item: unknown[]) => String(item[0]))
             .join('')
             .trim();
         }
@@ -388,10 +402,10 @@ export class DictionaryService {
         `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
       );
       if (res.ok) {
-        const data: any = await res.json();
+        const data = (await res.json()) as DictionaryEntry[];
         const entry = data?.[0];
         const phoneticObj =
-          entry?.phonetics?.find((p: any) => !!(p.text && p.audio)) ??
+          entry?.phonetics?.find((p) => !!(p.text && p.audio)) ??
           entry?.phonetics?.[0];
         const text = String(phoneticObj?.text || entry?.phonetic || '');
         if (text) return text;

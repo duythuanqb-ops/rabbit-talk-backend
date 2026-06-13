@@ -1,12 +1,12 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const nodemailer = require('nodemailer');
+import * as nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 import config from '../../config';
 
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
-  private transporter: any;
+  private transporter!: Transporter;
 
   onModuleInit() {
     this.transporter = nodemailer.createTransport({
@@ -170,9 +170,6 @@ export class MailService implements OnModuleInit {
     }
   }
 
-  /**
-   * Verify the SMTP connection – useful for health checks.
-   */
   async verifyConnection(): Promise<boolean> {
     try {
       await this.transporter.verify();

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
+import {} from '../../database/database.types';
 import { GeminiService } from './services/gemini.service';
 import { DictionaryService } from './services/dictionary.service';
 
@@ -11,10 +12,6 @@ export class FlashcardService {
     private readonly gemini: GeminiService,
     private readonly dictionary: DictionaryService,
   ) {}
-
-  // ---------------------------------------------------------------------------
-  // OCR / AI parsing — delegated to GeminiService
-  // ---------------------------------------------------------------------------
 
   parseOcrText(text: string): Promise<string[]> {
     return this.gemini.parseOcrText(text);
@@ -27,10 +24,6 @@ export class FlashcardService {
     return this.gemini.parseImageWithVision(imageBuffer, mimeType);
   }
 
-  // ---------------------------------------------------------------------------
-  // Flashcard Sets
-  // ---------------------------------------------------------------------------
-
   async getSetsByGroupId(groupId: string) {
     const sql = `
       SELECT f.id, f.title, f.description, f.created_at, u.first_name, u.last_name,
@@ -40,7 +33,7 @@ export class FlashcardService {
       WHERE f.group_id = ?
       ORDER BY f.created_at DESC
     `;
-    return this.db.query(sql, [groupId]);
+    return this.db.query<Record<string, unknown>>(sql, [groupId]);
   }
 
   async getMySets(userId: string, role: string) {
@@ -54,7 +47,7 @@ export class FlashcardService {
         WHERE f.teacher_id = ?
         ORDER BY f.created_at DESC
       `;
-      return this.db.query(sql, [userId]);
+      return this.db.query<Record<string, unknown>>(sql, [userId]);
     }
 
     const sql = `
@@ -74,7 +67,7 @@ export class FlashcardService {
       WHERE m.user_id = ? AND f.is_published = 1
       ORDER BY f.created_at DESC
     `;
-    return this.db.query(sql, [userId, userId]);
+    return this.db.query<Record<string, unknown>>(sql, [userId, userId]);
   }
 
   async createSet(
@@ -100,7 +93,6 @@ export class FlashcardService {
   }
 
   async deleteSet(setId: string) {
-    // Delete cascade: progress → cards → set
     await this.db.execute(
       `DELETE p FROM student_flashcard_progress p
        JOIN flashcards f ON p.flashcard_id = f.id
@@ -120,10 +112,6 @@ export class FlashcardService {
     return { id: setId, is_published: isPublished };
   }
 
-  // ---------------------------------------------------------------------------
-  // Flashcards (individual cards)
-  // ---------------------------------------------------------------------------
-
   async getCardsForSet(setId: string, studentId: string) {
     const sql = `
       SELECT f.*, COALESCE(p.status, 'learning') as status
@@ -132,7 +120,7 @@ export class FlashcardService {
         ON f.id = p.flashcard_id AND p.student_id = ?
       WHERE f.set_id = ?
     `;
-    return this.db.query(sql, [studentId, setId]);
+    return this.db.query<Record<string, unknown>>(sql, [studentId, setId]);
   }
 
   async addFlashcard(setId: string, word: string) {
@@ -213,10 +201,6 @@ export class FlashcardService {
     await this.db.execute(`DELETE FROM flashcards WHERE id = ?`, [cardId]);
     return { success: true };
   }
-
-  // ---------------------------------------------------------------------------
-  // Student progress
-  // ---------------------------------------------------------------------------
 
   async updateProgress(
     studentId: string,

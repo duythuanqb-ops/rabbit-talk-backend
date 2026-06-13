@@ -34,7 +34,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
     }
 
-    // Only log stack trace for unhandled (5xx) errors
     if (status >= 500) {
       this.logger.error(
         `${request.method} ${request.url} → ${status}`,
