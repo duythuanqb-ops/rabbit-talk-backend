@@ -6,12 +6,24 @@ import {
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
 
+interface FriendshipRow {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  status: 'pending' | 'accepted' | 'declined';
+}
+
+interface UserRow {
+  uuid: string;
+  username: string;
+}
+
 @Injectable()
 export class FriendService {
   constructor(private readonly db: DatabaseService) {}
 
   async sendFriendRequest(senderUuid: string, receiverIdentifier: string) {
-    const users = await this.db.query(
+    const users = await this.db.query<UserRow>(
       'SELECT uuid, username FROM users WHERE username = ? OR email = ? LIMIT 1',
       [receiverIdentifier, receiverIdentifier],
     );
@@ -25,7 +37,7 @@ export class FriendService {
     if (senderUuid === receiverUuid) {
       throw new BadRequestException('Cannot send a friend request to yourself');
     }
-    const relations = await this.db.query(
+    const relations = await this.db.query<FriendshipRow>(
       'SELECT * FROM friendships WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?) LIMIT 1',
       [senderUuid, receiverUuid, receiverUuid, senderUuid],
     );
@@ -76,7 +88,7 @@ export class FriendService {
     };
   }
 
-  async getPendingRequests(userUuid: string) {
+  async getPendingRequests(userUuid: string): Promise<unknown[]> {
     const sql = `
       SELECT 
         f.id AS request_id, 
@@ -96,7 +108,12 @@ export class FriendService {
         AND u.uuid != ?
       ORDER BY f.created_at DESC
     `;
-    return this.db.query(sql, [userUuid, userUuid, userUuid, userUuid]);
+    return this.db.query<Record<string, unknown>>(sql, [
+      userUuid,
+      userUuid,
+      userUuid,
+      userUuid,
+    ]);
   }
 
   async respondFriendRequest(
@@ -104,7 +121,7 @@ export class FriendService {
     requestId: string,
     accept: boolean,
   ) {
-    const requests = await this.db.query(
+    const requests = await this.db.query<FriendshipRow>(
       'SELECT * FROM friendships WHERE id = ? AND receiver_id = ? AND status = "pending" LIMIT 1',
       [requestId, userUuid],
     );
@@ -129,7 +146,7 @@ export class FriendService {
     }
   }
 
-  async getFriends(userUuid: string) {
+  async getFriends(userUuid: string): Promise<unknown[]> {
     const sql = `
       SELECT 
         f.id AS friendship_id, 
@@ -148,7 +165,11 @@ export class FriendService {
         AND u.uuid != ?
       ORDER BY u.first_name ASC, u.last_name ASC
     `;
-    return this.db.query(sql, [userUuid, userUuid, userUuid]);
+    return this.db.query<Record<string, unknown>>(sql, [
+      userUuid,
+      userUuid,
+      userUuid,
+    ]);
   }
 
   async unfriend(userUuid: string, friendUuid: string) {
@@ -168,7 +189,7 @@ export class FriendService {
     };
   }
 
-  async searchUsers(userUuid: string, query: string) {
+  async searchUsers(userUuid: string, query: string): Promise<unknown[]> {
     const cleanQuery = query.startsWith('@') ? query.slice(1) : query;
     const sql = `
       SELECT 
@@ -191,7 +212,7 @@ export class FriendService {
         AND u.role != 'admin'
       LIMIT 15
     `;
-    return this.db.query(sql, [
+    return this.db.query<Record<string, unknown>>(sql, [
       userUuid,
       userUuid,
       cleanQuery,

@@ -1,10 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import config from '../../../config';
 
-// ---------------------------------------------------------------------------
-// Internal HTTP helpers
-// ---------------------------------------------------------------------------
-
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
@@ -15,7 +11,7 @@ async function fetchWithRetry(
   while (true) {
     try {
       const response = await fetch(url, options);
-      // Retry only on 5xx or 429; everything else (including 4xx) is returned as-is
+
       if (response.ok || (response.status < 500 && response.status !== 429)) {
         return response;
       }
@@ -40,14 +36,17 @@ function buildGeminiUrl(model: string, apiKey: string): string {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 }
 
-// Ordered by speed/priority. Add new stable models here only.
+export interface ExamQuestion {
+  word: string;
+  type: 'synonym' | 'matching' | 'listening' | 'spelling' | 'situation';
+  question_text: string;
+  options: string[] | null;
+  correct_answer: string;
+}
+
 const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
 
 const JSON_GENERATION_CONFIG = { responseMimeType: 'application/json' };
-
-// ---------------------------------------------------------------------------
-// OCR extraction prompts
-// ---------------------------------------------------------------------------
 
 const OCR_TEXT_PROMPT = (
   text: string,
@@ -165,19 +164,11 @@ Rules:
 ]
 `;
 
-// ---------------------------------------------------------------------------
-// Service
-// ---------------------------------------------------------------------------
-
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
   private readonly apiKey = config.gemini.apiKey;
 
-  /**
-   * Parse raw OCR text and extract English vocabulary words.
-   * Falls back to the local parser if all Gemini models fail.
-   */
   async parseOcrText(text: string): Promise<string[]> {
     if (!text?.trim()) return [];
 
@@ -201,9 +192,6 @@ export class GeminiService {
     throw new Error('All Gemini models failed to parse OCR text');
   }
 
-  /**
-   * Parse a glossary image and extract vocabulary words via Gemini Vision.
-   */
   async parseImageWithVision(
     imageBuffer: Buffer,
     mimeType: string,
@@ -227,10 +215,7 @@ export class GeminiService {
     return words.filter((w) => w.length > 0);
   }
 
-  /**
-   * Generate multiple-choice and spelling questions for the given vocabulary words using Gemini.
-   */
-  async generateExamQuestions(items: string[]): Promise<any[]> {
+  async generateExamQuestions(items: string[]): Promise<ExamQuestion[]> {
     if (!items || items.length === 0) return [];
 
     if (!this.apiKey) {
@@ -245,7 +230,7 @@ export class GeminiService {
     );
 
     const prompt = EXAM_QUESTIONS_PROMPT(items);
-    const questions = await this.tryModels<any[]>((model) =>
+    const questions = await this.tryModels<ExamQuestion[]>((model) =>
       this.callGeminiQuestions(model, prompt),
     );
 
@@ -258,11 +243,6 @@ export class GeminiService {
     return [];
   }
 
-  // ---------------------------------------------------------------------------
-  // Private helpers
-  // ---------------------------------------------------------------------------
-
-  /** Try each model in order, return parsed value on first success or null. */
   private async tryModels<T>(
     callFn: (model: string) => Promise<T | null>,
   ): Promise<T | null> {
@@ -277,9 +257,6 @@ export class GeminiService {
     return null;
   }
 
-  /**
-   * Shared JSON-mode POST helper. Returns parsed response body or null on any HTTP error.
-   */
   private async callGeminiJson(
     model: string,
     body: object,
@@ -341,7 +318,7 @@ export class GeminiService {
   private async callGeminiQuestions(
     model: string,
     prompt: string,
-  ): Promise<any[] | null> {
+  ): Promise<ExamQuestion[] | null> {
     const data = await this.callGeminiJson(model, {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: JSON_GENERATION_CONFIG,
@@ -354,15 +331,17 @@ export class GeminiService {
     model: string,
     data: unknown,
   ): string[] | null {
-    const text = (data as any)?.candidates?.[0]?.content?.parts?.[0]?.text as
-      | string
-      | undefined;
+    const text = (
+      data as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
+    )?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) {
       this.logger.warn(`Model ${model}: empty response body`);
       return null;
     }
     try {
-      const parsed = JSON.parse(text.trim());
+      const parsed = JSON.parse(text.trim()) as
+        | Record<string, unknown>
+        | unknown[];
       if (Array.isArray(parsed)) {
         return parsed.map((w: unknown) => String(w).trim());
       }
@@ -375,25 +354,36 @@ export class GeminiService {
   private extractQuestionsFromResponse(
     model: string,
     data: unknown,
-  ): any[] | null {
-    const text = (data as any)?.candidates?.[0]?.content?.parts?.[0]?.text as
-      | string
-      | undefined;
+  ): ExamQuestion[] | null {
+    const text = (
+      data as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
+    )?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) {
       this.logger.warn(`Model ${model}: empty response body for questions`);
       return null;
     }
     try {
-      const parsed = JSON.parse(text.trim());
+      const parsed = JSON.parse(text.trim()) as
+        | Record<string, unknown>
+        | unknown[];
       if (Array.isArray(parsed)) {
-        return parsed.map((q: any) => ({
-          word: String(q.word || '').trim(),
-          type: String(q.type || 'synonym').trim(),
-          question_text: String(q.question_text || '').trim(),
+        return parsed.map((q: Record<string, unknown>) => ({
+          word: typeof q.word === 'string' ? q.word.trim() : '',
+          type: (typeof q.type === 'string' ? q.type.trim() : 'synonym') as
+            | 'synonym'
+            | 'matching'
+            | 'listening'
+            | 'spelling'
+            | 'situation',
+          question_text:
+            typeof q.question_text === 'string' ? q.question_text.trim() : '',
           options: Array.isArray(q.options)
-            ? q.options.map((o: any) => String(o).trim())
+            ? q.options.map((o: unknown) =>
+                typeof o === 'string' ? o.trim() : String(o),
+              )
             : null,
-          correct_answer: String(q.correct_answer || '').trim(),
+          correct_answer:
+            typeof q.correct_answer === 'string' ? q.correct_answer.trim() : '',
         }));
       }
     } catch {
@@ -404,10 +394,6 @@ export class GeminiService {
     return null;
   }
 
-  /**
-   * Generates high-quality phonetics, Vietnamese meaning, and example sentence for a multi-word phrase or expression using Gemini.
-   * Optimized with fail-fast (0 retries on 429) and a limited subset of fast models to ensure sub-second response times.
-   */
   async lookupPhrase(phrase: string): Promise<{
     phonetic: string;
     meaning: string;
@@ -432,7 +418,6 @@ Example:
   "exampleSentence": "The historical museum displays relics from the national resistance war."
 }`;
 
-    // Fail-fast: use same stable models as GEMINI_MODELS, no retries on 429
     const quickModels = GEMINI_MODELS;
 
     for (const model of quickModels) {
@@ -458,7 +443,7 @@ Example:
     exampleSentence: string;
   } | null> {
     const url = buildGeminiUrl(model, this.apiKey);
-    // PASS maxRetries = 0 here to fail-fast instantly on 429 instead of waiting 10+ seconds for retries
+
     const res = await fetchWithRetry(
       url,
       {
@@ -479,17 +464,21 @@ Example:
       return null;
     }
 
-    const data = await res.json();
+    const data = (await res.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     const text = raw ? String(raw) : '';
     if (!text) return null;
 
     try {
-      const parsed = JSON.parse(text.trim());
+      const parsed = JSON.parse(text.trim()) as unknown;
+      const p = parsed as Record<string, unknown>;
       return {
-        phonetic: String(parsed.phonetic || '').trim(),
-        meaning: String(parsed.meaning || '').trim(),
-        exampleSentence: String(parsed.exampleSentence || '').trim(),
+        phonetic: typeof p.phonetic === 'string' ? p.phonetic.trim() : '',
+        meaning: typeof p.meaning === 'string' ? p.meaning.trim() : '',
+        exampleSentence:
+          typeof p.exampleSentence === 'string' ? p.exampleSentence.trim() : '',
       };
     } catch {
       this.logger.warn(`Model ${model}: failed to parse phrase lookup JSON`);

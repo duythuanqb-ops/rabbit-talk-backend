@@ -46,7 +46,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ribbittalk_migrate
-    command: npm run db:migrate
+    command: pnpm run db:migrate
     env_file:
       - .env
     environment:
@@ -80,7 +80,7 @@ services:
       - DB_PASSWORD=root
       - DB_DATABASE=ribbittalk
       - FRONTEND_URL=http://localhost:3004
-    command: sh -c "npm install && npm run start:dev"
+    command: sh -c "npm install -g pnpm && pnpm install && pnpm run start:dev"
     depends_on:
       mysql:
         condition: service_healthy

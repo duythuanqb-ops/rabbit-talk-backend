@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {
   Controller,
   Get,
@@ -14,16 +13,13 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+
 import { FileInterceptor } from '@nestjs/platform-express';
 
 import { FlashcardService } from './flashcard.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-
-// ---------------------------------------------------------------------------
-// Flashcard Sets
-// ---------------------------------------------------------------------------
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('flashcard-sets')
@@ -48,12 +44,18 @@ export class FlashcardController {
   }
 
   @Get()
-  async getMySets(@Request() req) {
-    return this.flashcardService.getMySets(req.user.uuid, req.user.role);
+  async getMySets(@Request() req: { user: { uuid: string; role?: string } }) {
+    return this.flashcardService.getMySets(
+      req.user.uuid,
+      req.user.role as string,
+    );
   }
 
   @Get(':setId/cards')
-  async getCardsForSet(@Param('setId') setId: string, @Request() req) {
+  async getCardsForSet(
+    @Param('setId') setId: string,
+    @Request() req: { user: { uuid: string; role?: string } },
+  ) {
     return this.flashcardService.getCardsForSet(setId, req.user.uuid);
   }
 
@@ -91,10 +93,6 @@ export class FlashcardController {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Flashcard Sets nested under Groups
-// ---------------------------------------------------------------------------
-
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('groups')
 export class FlashcardGroupController {
@@ -104,7 +102,7 @@ export class FlashcardGroupController {
   @Roles('teacher', 'admin')
   async createSet(
     @Param('groupId') groupId: string,
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Body() body: { title: string; description: string },
   ) {
     return this.flashcardService.createSet(
@@ -116,10 +114,6 @@ export class FlashcardGroupController {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Individual Flashcards
-// ---------------------------------------------------------------------------
-
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('flashcards')
 export class FlashcardProgressController {
@@ -128,7 +122,7 @@ export class FlashcardProgressController {
   @Patch(':cardId/progress')
   async updateProgress(
     @Param('cardId') cardId: string,
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Body('status') status: 'learning' | 'mastered',
   ) {
     return this.flashcardService.updateProgress(req.user.uuid, cardId, status);

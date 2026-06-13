@@ -12,12 +12,16 @@ export function verifyPassword(password: string, hashed: string): boolean {
   return key === derivedKey;
 }
 
-export function parseDuplicateKeyError(error: any): string | null {
-  if (error?.code !== 'ER_DUP_ENTRY') {
+export function parseDuplicateKeyError(error: unknown): string | null {
+  const errObj = error as Record<string, unknown>;
+  if (errObj?.code !== 'ER_DUP_ENTRY') {
     return null;
   }
 
-  const message = String(error.sqlMessage || error.message || '');
+  const sqlMessage =
+    typeof errObj.sqlMessage === 'string' ? errObj.sqlMessage : '';
+  const messageStr = typeof errObj.message === 'string' ? errObj.message : '';
+  const message = sqlMessage || messageStr || '';
   if (
     message.includes("for key 'users.username'") ||
     message.includes("for key 'username'")

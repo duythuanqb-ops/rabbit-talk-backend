@@ -1,6 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from '../../../database/database.service';
+import { DatabaseService, SqlParam } from '../../../database/database.service';
+
+import { UserRow, TeacherProfileRow } from '../../../database/database.types';
 
 @Injectable()
 export class UserRepository {
@@ -55,9 +56,9 @@ export class UserRepository {
     'updated_at',
   ].join(', ');
 
-  async findByGoogleId(googleId: string) {
+  async findByGoogleId(googleId: string): Promise<UserRow | null> {
     const sql = `SELECT ${this.publicColumns} FROM users WHERE google_id = ? LIMIT 1`;
-    const users = await this.db.query(sql, [googleId]);
+    const users = await this.db.query<UserRow>(sql, [googleId]);
     return users[0] || null;
   }
 
@@ -76,20 +77,19 @@ export class UserRepository {
     ]);
   }
 
-  async findAll() {
-    return this.db.query(`SELECT ${this.publicColumns} FROM users`);
+  async findAll(): Promise<UserRow[]> {
+    return this.db.query<UserRow>(`SELECT ${this.publicColumns} FROM users`);
   }
 
-  async findByEmailOrUsername(identifier: string) {
-    // Include password only for auth purposes
+  async findByEmailOrUsername(identifier: string): Promise<UserRow | null> {
     const sql = 'SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1';
-    const users = await this.db.query(sql, [identifier, identifier]);
+    const users = await this.db.query<UserRow>(sql, [identifier, identifier]);
     return users[0] || null;
   }
 
-  async findByUuid(uuid: string) {
+  async findByUuid(uuid: string): Promise<UserRow | null> {
     const sql = `SELECT ${this.publicColumns} FROM users WHERE uuid = ? LIMIT 1`;
-    const users = await this.db.query(sql, [uuid]);
+    const users = await this.db.query<UserRow>(sql, [uuid]);
     return users[0] || null;
   }
 
@@ -106,14 +106,14 @@ export class UserRepository {
     return this.db.execute(sql, [token, expiresAt, uuid]);
   }
 
-  async findOtpByUuid(uuid: string) {
+  async findOtpByUuid(uuid: string): Promise<UserRow | null> {
     const sql = `
       SELECT uuid, email, email_verification_token, email_verification_expires, is_email_verified
       FROM users
       WHERE uuid = ?
       LIMIT 1
     `;
-    const users = await this.db.query(sql, [uuid]);
+    const users = await this.db.query<UserRow>(sql, [uuid]);
     return users[0] || null;
   }
 
@@ -126,14 +126,14 @@ export class UserRepository {
     return this.db.execute(sql, [token, expiresAt, email]);
   }
 
-  async findPasswordResetInfoByEmail(email: string) {
+  async findPasswordResetInfoByEmail(email: string): Promise<UserRow | null> {
     const sql = `
       SELECT uuid, email, password_reset_token, password_reset_expires
       FROM users
       WHERE email = ?
       LIMIT 1
     `;
-    const users = await this.db.query(sql, [email]);
+    const users = await this.db.query<UserRow>(sql, [email]);
     return users[0] || null;
   }
 
@@ -167,7 +167,7 @@ export class UserRepository {
     },
   ) {
     const setClauses: string[] = [];
-    const params: any[] = [];
+    const params: SqlParam[] = [];
 
     if (fields.first_name !== undefined) {
       setClauses.push('first_name = ?');
@@ -208,7 +208,15 @@ export class UserRepository {
     return this.db.execute(sql, [coverUrl, uuid]);
   }
 
-  async registerTeacher(uuid: string, dto: any) {
+  async registerTeacher(
+    uuid: string,
+    dto: {
+      headline: string;
+      experience_years: number;
+      video_intro_url?: string;
+      certificates?: string;
+    },
+  ) {
     const sql = `
       INSERT INTO teacher_profiles (user_uuid, headline, experience_years, video_intro_url, certificates, status)
       VALUES (?, ?, ?, ?, ?, 'pending')
@@ -228,7 +236,9 @@ export class UserRepository {
     ]);
   }
 
-  async getTeacherRequests() {
+  async getTeacherRequests(): Promise<
+    Array<TeacherProfileRow & Partial<UserRow>>
+  > {
     const sql = `
       SELECT 
         tp.id, tp.headline, tp.experience_years, tp.video_intro_url, tp.certificates, tp.status, tp.created_at,
@@ -237,7 +247,7 @@ export class UserRepository {
       JOIN users u ON tp.user_uuid = u.uuid
       ORDER BY tp.created_at DESC
     `;
-    return this.db.query(sql);
+    return this.db.query<TeacherProfileRow & Partial<UserRow>>(sql);
   }
 
   async updateTeacherRequestStatus(

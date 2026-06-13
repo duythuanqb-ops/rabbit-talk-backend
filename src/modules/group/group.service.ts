@@ -1,11 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   Injectable,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { DatabaseService } from '../../database/database.service';
+import { DatabaseService, SqlParam } from '../../database/database.service';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
@@ -14,7 +13,10 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 export class GroupService {
   constructor(private readonly db: DatabaseService) {}
 
-  async createGroup(teacherId: string, createGroupDto: CreateGroupDto) {
+  async createGroup(
+    teacherId: string,
+    createGroupDto: CreateGroupDto,
+  ): Promise<Record<string, unknown>> {
     const groupId = uuidv4();
     const { title, description, avatar } = createGroupDto;
 
@@ -47,10 +49,11 @@ export class GroupService {
     return this.db.query(sql, [studentId]);
   }
 
-  async getGroupById(groupId: string) {
-    const groups = await this.db.query('SELECT * FROM `groups` WHERE id = ?', [
-      groupId,
-    ]);
+  async getGroupById(groupId: string): Promise<Record<string, unknown>> {
+    const groups = await this.db.query<{ uuid: string }>(
+      'SELECT * FROM `groups` WHERE id = ?',
+      [groupId],
+    );
     if (!groups.length) {
       throw new NotFoundException('Group not found');
     }
@@ -61,7 +64,7 @@ export class GroupService {
     groupId: string,
     teacherId: string,
     updateGroupDto: UpdateGroupDto,
-  ) {
+  ): Promise<Record<string, unknown>> {
     const group = await this.getGroupById(groupId);
     if (group.created_by !== teacherId) {
       throw new ForbiddenException('You can only update your own groups');
@@ -70,7 +73,7 @@ export class GroupService {
     const { title, description, avatar } = updateGroupDto;
 
     const updates: string[] = [];
-    const params: any[] = [];
+    const params: SqlParam[] = [];
 
     if (title !== undefined) {
       updates.push('title = ?');
@@ -114,7 +117,7 @@ export class GroupService {
       );
     }
 
-    const users = await this.db.query(
+    const users = await this.db.query<{ uuid: string }>(
       'SELECT uuid FROM users WHERE username = ? OR email = ?',
       [identifier, identifier],
     );
@@ -131,8 +134,8 @@ export class GroupService {
         [memberId, groupId, userId],
       );
       return { success: true, message: 'Member added' };
-    } catch (error: any) {
-      if (error.code === 'ER_DUP_ENTRY') {
+    } catch (error: unknown) {
+      if ((error as { code?: string }).code === 'ER_DUP_ENTRY') {
         throw new BadRequestException('User is already a member of this group');
       }
       throw error;

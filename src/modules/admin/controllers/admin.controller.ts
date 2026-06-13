@@ -14,46 +14,58 @@ import {
 import { AdminService } from '../services/admin.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
+interface AuthenticatedRequest {
+  user: { uuid: string; role?: string };
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
-  private checkAdmin(req: any) {
+  private checkAdmin(req: AuthenticatedRequest) {
     if (req.user.role !== 'admin') {
       throw new ForbiddenException('Admin access required');
     }
   }
 
   @Get('teachers/requests')
-  async getTeacherRequests(@Request() req) {
+  async getTeacherRequests(
+    @Request() req: { user: { uuid: string; role?: string } },
+  ) {
     this.checkAdmin(req);
     return this.adminService.getTeacherRequests();
   }
 
   @Patch('teachers/requests/:uuid/approve')
-  async approveRequest(@Request() req, @Param('uuid') uuid: string) {
+  async approveRequest(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Param('uuid') uuid: string,
+  ) {
     this.checkAdmin(req);
     await this.adminService.approveTeacherRequest(uuid);
     return { message: 'Teacher request approved' };
   }
 
   @Patch('teachers/requests/:uuid/reject')
-  async rejectRequest(@Request() req, @Param('uuid') uuid: string) {
+  async rejectRequest(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Param('uuid') uuid: string,
+  ) {
     this.checkAdmin(req);
     await this.adminService.rejectTeacherRequest(uuid);
     return { message: 'Teacher request rejected' };
   }
 
   @Get('quests')
-  async getQuests(@Request() req) {
+  async getQuests(@Request() req: { user: { uuid: string; role?: string } }) {
     this.checkAdmin(req);
     return this.adminService.getQuests();
   }
 
   @Post('quests')
   async createQuest(
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Body()
     data: {
       title: string;
@@ -69,7 +81,7 @@ export class AdminController {
 
   @Put('quests/:id')
   async updateQuest(
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Param('id') id: string,
     @Body()
     data: {
@@ -85,7 +97,10 @@ export class AdminController {
   }
 
   @Delete('quests/:id')
-  async deleteQuest(@Request() req, @Param('id') id: string) {
+  async deleteQuest(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Param('id') id: string,
+  ) {
     this.checkAdmin(req);
     return this.adminService.deleteQuest(id);
   }

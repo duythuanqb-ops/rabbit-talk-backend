@@ -23,7 +23,7 @@ export class ResponseInterceptor<T> implements NestInterceptor<
     next: CallHandler,
   ): Observable<ApiResponse<T>> {
     const ctx = context.switchToHttp();
-    const response = ctx.getResponse();
+    const response = ctx.getResponse<import('express').Response>();
 
     return next.handle().pipe(
       map((data) => {

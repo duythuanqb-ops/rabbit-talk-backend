@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import {
   Body,
   Controller,
@@ -32,13 +31,19 @@ export class UserController {
 
   @UseGuards(JwtAuthGuard)
   @Put('profile')
-  async updateProfile(@Request() req, @Body() dto: UpdateProfileDto) {
+  async updateProfile(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Body() dto: UpdateProfileDto,
+  ) {
     return await this.userService.updateProfile(req.user.uuid, dto);
   }
 
   @UseGuards(JwtAuthGuard)
   @Put('password')
-  async updatePassword(@Request() req, @Body() dto: UpdatePasswordDto) {
+  async updatePassword(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Body() dto: UpdatePasswordDto,
+  ) {
     return await this.userService.updatePassword(req.user.uuid, dto);
   }
 }

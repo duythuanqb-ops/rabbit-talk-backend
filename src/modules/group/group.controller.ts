@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {
   Controller,
   Get,
@@ -22,6 +21,10 @@ import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { AddMemberDto } from './dto/add-member.dto';
 
+interface AuthenticatedRequest {
+  user: { uuid: string; role?: string };
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller('groups')
 export class GroupController {
@@ -30,20 +33,23 @@ export class GroupController {
     private readonly uploadService: UploadService,
   ) {}
 
-  private checkTeacher(req: any) {
+  private checkTeacher(req: AuthenticatedRequest) {
     if (req.user.role !== 'teacher' && req.user.role !== 'admin') {
       throw new ForbiddenException('Teacher or admin access required');
     }
   }
 
   @Post()
-  create(@Request() req, @Body() createGroupDto: CreateGroupDto) {
+  create(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Body() createGroupDto: CreateGroupDto,
+  ) {
     this.checkTeacher(req);
     return this.groupService.createGroup(req.user.uuid, createGroupDto);
   }
 
   @Get()
-  findAll(@Request() req) {
+  findAll(@Request() req: { user: { uuid: string; role?: string } }) {
     if (req.user.role === 'teacher' || req.user.role === 'admin') {
       return this.groupService.getGroupsByTeacher(req.user.uuid);
     } else {
@@ -52,13 +58,16 @@ export class GroupController {
   }
 
   @Get(':id')
-  findOne(@Request() req, @Param('id') id: string) {
+  findOne(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Param('id') id: string,
+  ) {
     return this.groupService.getGroupById(id);
   }
 
   @Patch(':id')
   update(
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Param('id') id: string,
     @Body() updateGroupDto: UpdateGroupDto,
   ) {
@@ -67,19 +76,25 @@ export class GroupController {
   }
 
   @Delete(':id')
-  remove(@Request() req, @Param('id') id: string) {
+  remove(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Param('id') id: string,
+  ) {
     this.checkTeacher(req);
     return this.groupService.deleteGroup(id, req.user.uuid);
   }
 
   @Get(':id/members')
-  getMembers(@Request() req, @Param('id') id: string) {
+  getMembers(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Param('id') id: string,
+  ) {
     return this.groupService.getGroupMembers(id, req.user.uuid);
   }
 
   @Post(':id/members')
   addMember(
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Param('id') id: string,
     @Body() addMemberDto: AddMemberDto,
   ) {
@@ -93,7 +108,7 @@ export class GroupController {
 
   @Delete(':id/members/:userId')
   removeMember(
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Param('id') id: string,
     @Param('userId') userId: string,
   ) {
@@ -104,7 +119,7 @@ export class GroupController {
   @Post(':id/avatar')
   @UseInterceptors(FileInterceptor('file'))
   async uploadAvatar(
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {

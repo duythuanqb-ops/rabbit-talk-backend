@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import {
   Controller,
   Get,
@@ -25,58 +24,67 @@ export class DashboardController {
   }
 
   @Get('teacher/stats')
-  getTeacherStats(@Request() req) {
+  getTeacherStats(@Request() req: { user: { uuid: string; role?: string } }) {
     return this.dashboardService.getTeacherStats(req.user.uuid);
   }
 
   @Get('teacher/alerts')
-  getTeacherAlerts(@Request() req) {
+  getTeacherAlerts(@Request() req: { user: { uuid: string; role?: string } }) {
     return this.dashboardService.getTeacherAlerts(req.user.uuid);
   }
 
   @Get('leaderboard')
-  getLeaderboard(@Request() req, @Query('scope') scope: 'global' | 'friends') {
+  getLeaderboard(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Query('scope') scope: 'global' | 'friends',
+  ) {
     return this.dashboardService.getLeaderboard(req.user.uuid, scope);
   }
 
   @Get('profile')
-  getProfileStats(@Request() req) {
+  getProfileStats(@Request() req: { user: { uuid: string; role?: string } }) {
     return this.dashboardService.getProfileStats(req.user.uuid);
   }
 
   @Get('student/stats')
-  getStudentStats(@Request() req) {
+  getStudentStats(@Request() req: { user: { uuid: string; role?: string } }) {
     return this.dashboardService.getStudentStats(req.user.uuid);
   }
 
   @Get('student/assignments')
-  getStudentAssignments(@Request() req) {
+  getStudentAssignments(
+    @Request() req: { user: { uuid: string; role?: string } },
+  ) {
     return this.dashboardService.getStudentAssignments(req.user.uuid);
   }
 
   @Get('student/quests')
-  getStudentQuests(@Request() req) {
+  getStudentQuests(@Request() req: { user: { uuid: string; role?: string } }) {
     return this.dashboardService.getStudentQuests(req.user.uuid);
   }
 
   @Get('student/attendance')
-  getStudentAttendance(@Request() req) {
+  getStudentAttendance(
+    @Request() req: { user: { uuid: string; role?: string } },
+  ) {
     return this.dashboardService.getStudentAttendance(req.user.uuid);
   }
 
   @Post('student/checkin')
-  checkInStudent(@Request() req) {
+  checkInStudent(@Request() req: { user: { uuid: string; role?: string } }) {
     return this.dashboardService.checkInStudent(req.user.uuid);
   }
 
   @Get('student/vocabulary')
-  getStudentVocabulary(@Request() req) {
+  getStudentVocabulary(
+    @Request() req: { user: { uuid: string; role?: string } },
+  ) {
     return this.dashboardService.getStudentVocabulary(req.user.uuid);
   }
 
   @Post('student/vocabulary/star')
   toggleVocabularyStar(
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Query('flashcardId') flashcardId: string,
   ) {
     return this.dashboardService.toggleVocabularyStar(
@@ -87,7 +95,7 @@ export class DashboardController {
 
   @Post('student/vocabulary/custom')
   addCustomWord(
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Body()
     body: {
       word: string;
@@ -107,7 +115,7 @@ export class DashboardController {
 
   @Put('student/vocabulary/custom/:id')
   updateCustomWord(
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Param('id') id: string,
     @Body() body: { word: string; meaning?: string },
   ) {
@@ -120,18 +128,23 @@ export class DashboardController {
   }
 
   @Delete('student/vocabulary/custom/:id')
-  deleteCustomWord(@Request() req, @Param('id') id: string) {
+  deleteCustomWord(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Param('id') id: string,
+  ) {
     return this.dashboardService.deleteCustomWord(id, req.user.uuid);
   }
 
   @Get('student/vocabulary/study')
-  getVocabularyStudyCards(@Request() req) {
+  getVocabularyStudyCards(
+    @Request() req: { user: { uuid: string; role?: string } },
+  ) {
     return this.dashboardService.getVocabularyStudyCards(req.user.uuid);
   }
 
   @Post('student/quests/track')
   trackQuestProgress(
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Body() body: { questType: string; increment?: number },
   ) {
     return this.dashboardService.updateQuestProgress(

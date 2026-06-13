@@ -27,8 +27,6 @@ export class AppController {
       throw new BadRequestException('Audio URL is required');
     }
 
-    // Detect if URL is a Google Translate TTS request so we can send the
-    // correct Referer header — Google TTS returns 403 without it.
     const isGoogleTts =
       url.includes('translate.google.com') ||
       url.includes('translate.googleapis.com');
@@ -55,15 +53,15 @@ export class AppController {
       const contentType = response.headers.get('content-type') || 'audio/mpeg';
       res.setHeader('Content-Type', contentType);
       res.setHeader('Access-Control-Allow-Origin', '*');
-      // Optional: Add Cache-Control so the browser caches the audio
       res.setHeader('Cache-Control', 'public, max-age=31536000');
 
       const buffer = await response.arrayBuffer();
       res.send(Buffer.from(buffer));
-    } catch (error: any) {
-      res
-        .status(500)
-        .json({ message: 'Error proxying audio', error: error.message });
+    } catch (error: unknown) {
+      res.status(500).json({
+        message: 'Error proxying audio',
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }
