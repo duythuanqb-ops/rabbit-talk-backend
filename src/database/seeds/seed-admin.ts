@@ -1,12 +1,4 @@
-/**
- * Seed: Create Admin Account
- * Email: rootuser@gmail.com
- * Password: rootuser@gmail.com
- *
- * Usage: npm run db:seed
- */
-
-import { createPool } from 'mysql2/promise';
+import { createPool, type RowDataPacket } from 'mysql2/promise';
 import { randomBytes, scryptSync } from 'crypto';
 import { randomUUID } from 'crypto';
 import * as dotenv from 'dotenv';
@@ -36,13 +28,12 @@ async function seedAdmin() {
   const hashedPassword = hashPassword(adminPassword);
 
   try {
-    // Check if admin already exists
     const [existing] = await pool.execute(
       'SELECT id FROM users WHERE email = ? OR username = ? LIMIT 1',
       [adminEmail, adminUsername],
     );
 
-    const rows = existing as any[];
+    const rows = existing as RowDataPacket[];
     if (rows.length > 0) {
       console.log('✅ Admin account already exists. Skipping seed.');
       return;

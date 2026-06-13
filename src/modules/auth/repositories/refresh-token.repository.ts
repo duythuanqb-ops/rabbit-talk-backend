@@ -1,6 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../../database/database.service';
+
+import { RefreshTokenRow, UserRow } from '../../../database/database.types';
 
 @Injectable()
 export class RefreshTokenRepository {
@@ -32,7 +33,9 @@ export class RefreshTokenRepository {
     ]);
   }
 
-  async findValidToken(token: string) {
+  async findValidToken(
+    token: string,
+  ): Promise<(RefreshTokenRow & Partial<UserRow>) | null> {
     const sql = `
       SELECT rt.*, u.username, u.email, u.first_name, u.last_name, u.role
       FROM refresh_tokens rt
@@ -40,7 +43,10 @@ export class RefreshTokenRepository {
       WHERE rt.token = ? AND rt.is_revoked = FALSE AND rt.expires_at > ?
       LIMIT 1
     `;
-    const results = await this.db.query(sql, [token, new Date()]);
+    const results = await this.db.query<RefreshTokenRow & Partial<UserRow>>(
+      sql,
+      [token, new Date()],
+    );
     return results[0] || null;
   }
 

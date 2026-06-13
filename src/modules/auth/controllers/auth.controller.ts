@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import {
   Controller,
   Post,
@@ -18,7 +17,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
-import { AuthService } from '../services/auth.service';
+import { AuthService, AuthUser } from '../services/auth.service';
 import { UserService } from '../../user/services/user.service';
 import { MailService } from '../../mail/mail.service';
 import { UploadService } from '../../upload/upload.service';
@@ -27,6 +26,11 @@ import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { LoginDto } from '../dto/auth.dto';
 import { UpdateProfileDto, RegisterTeacherDto } from '../../user/dto/user.dto';
 import config from '../../../config';
+
+interface AuthRequest {
+  user: AuthUser;
+  cookies: Record<string, string>;
+}
 
 @Controller('auth')
 export class AuthController {
@@ -41,7 +45,7 @@ export class AuthController {
   @Post('login')
   async login(
     @Body() loginDto: LoginDto,
-    @Request() req,
+    @Request() req: AuthRequest,
     @Res({ passthrough: true }) res: Response,
     @Headers('user-agent') userAgent: string,
     @Ip() ip: string,
@@ -83,8 +87,11 @@ export class AuthController {
   }
 
   @Post('refresh')
-  async refresh(@Request() req, @Res({ passthrough: true }) res: Response) {
-    const refreshToken = req.cookies.refresh_token;
+  async refresh(
+    @Request() req: AuthRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken = req.cookies['refresh_token'];
     if (!refreshToken) {
       res.clearCookie('access_token');
       res.clearCookie('refresh_token');
@@ -120,8 +127,11 @@ export class AuthController {
   }
 
   @Post('logout')
-  async logout(@Request() req, @Res({ passthrough: true }) res: Response) {
-    const refreshToken = req.cookies.refresh_token;
+  async logout(
+    @Request() req: AuthRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken = req.cookies['refresh_token'];
     if (refreshToken) {
       await this.authService.revokeRefreshToken(refreshToken);
     }
@@ -160,13 +170,16 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('profile')
   @Header('Cache-Control', 'no-store')
-  getProfile(@Request() req) {
+  getProfile(@Request() req: AuthRequest) {
     return this.userService.findByUuid(req.user.uuid);
   }
 
   @UseGuards(JwtAuthGuard)
   @Patch('profile')
-  async updateProfile(@Request() req, @Body() dto: UpdateProfileDto) {
+  async updateProfile(
+    @Request() req: AuthRequest,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<unknown> {
     return this.userService.updateProfile(req.user.uuid, dto);
   }
 
@@ -174,7 +187,7 @@ export class AuthController {
   @Post('avatar')
   @UseInterceptors(FileInterceptor('file'))
   async uploadAvatar(
-    @Request() req,
+    @Request() req: AuthRequest,
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) {
@@ -187,7 +200,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Patch('avatar/remove')
-  async removeAvatar(@Request() req) {
+  async removeAvatar(@Request() req: AuthRequest) {
     await this.userService.updateAvatar(req.user.uuid, null);
     return { message: 'Avatar removed successfully', avatar_url: null };
   }
@@ -196,7 +209,7 @@ export class AuthController {
   @Post('cover')
   @UseInterceptors(FileInterceptor('file'))
   async uploadCover(
-    @Request() req,
+    @Request() req: AuthRequest,
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) {
@@ -209,14 +222,14 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Patch('cover/remove')
-  async removeCover(@Request() req) {
+  async removeCover(@Request() req: AuthRequest) {
     await this.userService.updateCover(req.user.uuid, null);
     return { message: 'Cover removed successfully', cover_url: null };
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('send-verification-email')
-  async sendVerificationEmail(@Request() req) {
+  async sendVerificationEmail(@Request() req: AuthRequest) {
     const user = await this.userService.findByUuid(req.user.uuid);
     if (!user) throw new UnauthorizedException('User not found.');
     if (user.is_email_verified) {
@@ -231,7 +244,10 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('verify-email-otp')
-  async verifyEmailOtp(@Request() req, @Body('code') code: string) {
+  async verifyEmailOtp(
+    @Request() req: AuthRequest,
+    @Body('code') code: string,
+  ) {
     if (!code || code.trim().length !== 6) {
       throw new BadRequestException('Please enter a valid 6-digit code.');
     }
@@ -247,7 +263,10 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('teacher/register')
-  async registerTeacher(@Request() req, @Body() dto: RegisterTeacherDto) {
+  async registerTeacher(
+    @Request() req: AuthRequest,
+    @Body() dto: RegisterTeacherDto,
+  ) {
     return this.userService.registerTeacher(req.user.uuid, dto);
   }
 
@@ -259,13 +278,24 @@ export class AuthController {
     if (!email) {
       throw new BadRequestException('Email is required');
     }
-    const result = await this.userService.initiatePasswordReset(email, !!resend);
-    
+    const result = await this.userService.initiatePasswordReset(
+      email,
+      !!resend,
+    );
+
     if (result.isNew || resend) {
       await this.mailService.sendPasswordResetEmail(email, result.otp);
-      return { success: true, message: 'Password reset email sent.', sentEmail: true };
+      return {
+        success: true,
+        message: 'Password reset email sent.',
+        sentEmail: true,
+      };
     } else {
-      return { success: true, message: 'Previous reset code is still active.', sentEmail: false };
+      return {
+        success: true,
+        message: 'Previous reset code is still active.',
+        sentEmail: false,
+      };
     }
   }
 

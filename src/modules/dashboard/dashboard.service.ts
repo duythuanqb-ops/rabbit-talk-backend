@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unused-vars */
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
+
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -30,10 +30,11 @@ export class DashboardService {
       for (const sql of queries) {
         try {
           await this.db.query(sql);
-        } catch (e) {
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
           if (
-            !e.message.includes('Duplicate column name') &&
-            !e.message.includes('already exists')
+            !msg.includes('Duplicate column name') &&
+            !msg.includes('already exists')
           ) {
             throw e;
           }
@@ -41,12 +42,14 @@ export class DashboardService {
       }
       return { success: true, message: 'Migration applied successfully!' };
     } catch (e) {
-      return { success: false, error: e.message };
+      return {
+        success: false,
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   }
 
   async getTeacherStats(teacherId: string) {
-    // Total students across all classes created by teacher
     const studentsRes = await this.db.query(
       `SELECT COUNT(DISTINCT gm.user_id) as count 
        FROM group_members gm 
@@ -54,25 +57,54 @@ export class DashboardService {
        WHERE g.created_by = ?`,
       [teacherId],
     );
-    const totalStudents = studentsRes[0]?.count || 0;
+    const totalStudents = Number(studentsRes[0]?.count || 0);
 
-    // Pending exams (unpublished or no attempts)
     const examsRes = await this.db.query(
       `SELECT COUNT(id) as count FROM exams WHERE teacher_id = ? AND is_published = 0`,
       [teacherId],
     );
     const pendingExams = examsRes[0]?.count || 0;
 
+    const avgProgressRes = await this.db.query(
+      `SELECT AVG(CASE WHEN sea.total_questions > 0 THEN (sea.score * 100.0 / sea.total_questions) ELSE 0 END) as avgProgress
+       FROM student_exam_attempts sea
+       JOIN exams e ON sea.exam_id = e.id
+       WHERE e.teacher_id = ?`,
+      [teacherId],
+    );
+    const avgProgress = Math.round(Number(avgProgressRes[0]?.avgProgress) || 0);
+
+    const activeRes = await this.db.query<{ active_count: number }>(
+      `SELECT COUNT(DISTINCT student_id) as active_count
+       FROM (
+         SELECT sa.student_id
+         FROM student_attendance sa
+         JOIN group_members gm ON sa.student_id = gm.user_id
+         JOIN \`groups\` g ON gm.group_id = g.id
+         WHERE g.created_by = ? AND sa.date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+         
+         UNION
+         
+         SELECT sea.student_id
+         FROM student_exam_attempts sea
+         JOIN exams e ON sea.exam_id = e.id
+         WHERE e.teacher_id = ? AND sea.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       ) as active_students`,
+      [teacherId, teacherId],
+    );
+    const activeCount = Number(activeRes[0]?.active_count || 0);
+    const weeklyEngagement =
+      totalStudents > 0 ? Math.round((activeCount * 100) / totalStudents) : 0;
+
     return {
       totalStudents,
-      avgProgress: 76, // Mocked percentage for now
+      avgProgress,
       pendingExams,
-      weeklyEngagement: 85, // Mocked percentage
+      weeklyEngagement,
     };
   }
 
   async getTeacherAlerts(teacherId: string) {
-    // Mock logic: Find students in teacher's groups who scored < 50 on recent exams
     const sql = `
       SELECT sea.id, u.first_name, u.last_name, u.avatar_url, sea.score, sea.total_questions, e.title as exam_title
       FROM student_exam_attempts sea
@@ -82,7 +114,15 @@ export class DashboardService {
       ORDER BY sea.completed_at DESC
       LIMIT 10
     `;
-    const alerts = await this.db.query(sql, [teacherId]);
+    const alerts = await this.db.query<{
+      id: string;
+      first_name: string;
+      last_name: string;
+      avatar_url: string;
+      score: number;
+      total_questions: number;
+      exam_title: string;
+    }>(sql, [teacherId]);
     return alerts.map((a) => ({
       id: a.id,
       studentName: `${a.first_name} ${a.last_name}`,
@@ -95,10 +135,9 @@ export class DashboardService {
 
   async getLeaderboard(userId: string, scope: 'global' | 'friends' = 'global') {
     let sql = '';
-    let params: any[] = [];
+    let params: import('../../database/database.service').SqlParam[] = [];
 
     if (scope === 'friends') {
-      // Mock friend leaderboard
       sql = `
         SELECT u.uuid as id, u.username, u.first_name, u.last_name, u.avatar_url, u.xp, u.league
         FROM users u
@@ -115,7 +154,14 @@ export class DashboardService {
         ORDER BY xp DESC LIMIT 50
       `;
     }
-    const rows = await this.db.query(sql, params);
+    const rows = await this.db.query<{
+      id: string;
+      first_name: string;
+      last_name: string;
+      avatar_url: string;
+      xp: number;
+      league: string;
+    }>(sql, params);
     return rows.map((r, index) => ({
       id: r.id,
       rank: index + 1,
@@ -127,19 +173,20 @@ export class DashboardService {
   }
 
   async getProfileStats(userId: string) {
-    const user = await this.db.query(
-      'SELECT xp, day_streak, league FROM users WHERE uuid = ?',
-      [userId],
-    );
+    const userRes = await this.db.query<{
+      xp: number;
+      day_streak: number;
+      league: string;
+    }>('SELECT xp, day_streak, league FROM users WHERE uuid = ?', [userId]);
     const achievements = await this.db.query(
       'SELECT * FROM user_achievements WHERE user_id = ? ORDER BY earned_at DESC',
       [userId],
     );
 
     return {
-      xp: user[0]?.xp || 0,
-      dayStreak: user[0]?.day_streak || 0,
-      league: user[0]?.league || 'Bronze',
+      xp: userRes[0]?.xp || 0,
+      dayStreak: userRes[0]?.day_streak || 0,
+      league: userRes[0]?.league || 'Bronze',
       achievements: achievements.map((a) => ({
         id: a.id,
         title: a.title,
@@ -158,15 +205,15 @@ export class DashboardService {
     );
     const user = userRes[0] || { xp: 0, day_streak: 0, league: 'Bronze' };
 
-    const wordsRes = await this.db.query(
+    const wordsRes = await this.db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM student_flashcard_progress WHERE student_id = ? AND status = 'mastered'`,
       [studentId],
     );
     const wordsLearned = wordsRes[0]?.count || 0;
 
-    const rankRes = await this.db.query(
+    const rankRes = await this.db.query<{ rank: number }>(
       `SELECT COUNT(*) + 1 as \`rank\` FROM users WHERE role = 'student' AND xp > ?`,
-      [user.xp],
+      [Number(user.xp)],
     );
     const currentRank = rankRes[0]?.rank || 1;
 
@@ -194,19 +241,25 @@ export class DashboardService {
       LIMIT 10
     `;
     const assignments = await this.db.query(sql, [studentId, studentId]);
-    return assignments.map((a) => ({
-      id: a.id,
-      title: a.title,
-      dueDate: a.due_date,
-      groupName: a.group_name,
-      type: 'exam',
-      isUrgent:
-        new Date(a.due_date).getTime() - Date.now() < 24 * 60 * 60 * 1000, // urgent if due within 24h
-    }));
+    return assignments.map(
+      (a: {
+        id: string;
+        title: string;
+        due_date: string | Date;
+        group_name: string;
+      }) => ({
+        id: a.id,
+        title: a.title,
+        dueDate: a.due_date,
+        groupName: a.group_name,
+        type: 'exam',
+        isUrgent:
+          new Date(a.due_date).getTime() - Date.now() < 24 * 60 * 60 * 1000,
+      }),
+    );
   }
 
   async getStudentQuests(studentId: string) {
-    // 1. Ensure global quest pool is populated
     let quests = await this.db.query('SELECT * FROM daily_quests');
     if (quests.length === 0) {
       await this.db
@@ -217,7 +270,6 @@ export class DashboardService {
       quests = await this.db.query('SELECT * FROM daily_quests');
     }
 
-    // 2. Fetch today's progress for this student
     const progressSql = `
       SELECT p.id, p.quest_id, p.current_value, p.is_completed, 
              q.title, q.description, q.xp_reward, q.type, q.target_value
@@ -227,11 +279,12 @@ export class DashboardService {
     `;
     let todayProgress = await this.db.query(progressSql, [studentId]);
 
-    // 3. Assign new quests if we have less than 3 for today
     if (todayProgress.length < 3) {
-      const assignedQuestIds = todayProgress.map((p: any) => p.quest_id);
+      const assignedQuestIds = todayProgress.map(
+        (p: { quest_id: string }) => p.quest_id,
+      );
       const availableQuests = quests.filter(
-        (q: any) => !assignedQuestIds.includes(q.id),
+        (q: { id: string }) => !assignedQuestIds.includes(q.id),
       );
 
       const needed = 3 - todayProgress.length;
@@ -245,7 +298,7 @@ export class DashboardService {
           INSERT INTO student_quest_progress (id, student_id, quest_id, current_value, is_completed)
           VALUES (?, ?, ?, 0, 0)
         `,
-          [uuidv4(), studentId, q.id],
+          [uuidv4(), studentId, String(q.id)],
         );
       }
 
@@ -254,16 +307,29 @@ export class DashboardService {
       }
     }
 
-    return todayProgress.map((p: any) => ({
-      id: p.quest_id,
-      title: p.title,
-      description: p.description,
-      xpReward: p.xp_reward,
-      type: p.type,
-      targetValue: p.target_value,
-      currentValue: p.current_value,
-      isCompleted: !!p.is_completed,
-    }));
+    interface QuestProgressRow {
+      quest_id: string;
+      title: string;
+      description: string;
+      xp_reward: number;
+      type: string;
+      target_value: number;
+      current_value: number;
+      is_completed: number;
+    }
+
+    return (todayProgress as unknown as QuestProgressRow[]).map(
+      (p: QuestProgressRow) => ({
+        id: String(p.quest_id),
+        title: String(p.title),
+        description: String(p.description),
+        xpReward: Number(p.xp_reward),
+        type: String(p.type),
+        targetValue: Number(p.target_value),
+        currentValue: Number(p.current_value),
+        isCompleted: !!p.is_completed,
+      }),
+    );
   }
 
   async updateQuestProgress(
@@ -271,14 +337,19 @@ export class DashboardService {
     questType: string,
     increment: number = 1,
   ) {
-    // Find today's progress record matching the quest type
     const findSql = `
       SELECT p.id, p.current_value, p.is_completed, q.target_value, q.xp_reward
       FROM student_quest_progress p
       JOIN daily_quests q ON p.quest_id = q.id
       WHERE p.student_id = ? AND q.type = ? AND DATE(p.created_at) = CURDATE() AND p.is_completed = 0
     `;
-    const records = await this.db.query(findSql, [studentId, questType]);
+    const records = await this.db.query<{
+      id: string;
+      current_value: number;
+      is_completed: number;
+      target_value: number;
+      xp_reward: number;
+    }>(findSql, [studentId, questType]);
 
     if (records.length === 0)
       return { success: false, message: 'No active quest of this type today' };
@@ -287,7 +358,6 @@ export class DashboardService {
     let newValue = record.current_value + increment;
     const isCompleted = newValue >= record.target_value ? 1 : 0;
 
-    // Cap at target value
     if (newValue > record.target_value) newValue = record.target_value;
 
     const updateSql = `
@@ -298,7 +368,6 @@ export class DashboardService {
     await this.db.execute(updateSql, [newValue, isCompleted, record.id]);
 
     if (isCompleted) {
-      // Award XP to student
       const userSql = `UPDATE users SET xp = IFNULL(xp, 0) + ? WHERE uuid = ?`;
       await this.db.execute(userSql, [record.xp_reward, studentId]);
     }
@@ -320,22 +389,23 @@ export class DashboardService {
   async getStudentAttendance(studentId: string) {
     const today = new Date();
     const year = today.getFullYear();
-    const month = today.getMonth(); // 0-indexed
+    const month = today.getMonth();
 
     const pad = (n: number) => String(n).padStart(2, '0');
     const toDateStr = (d: Date) =>
       `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-    // Fetch all attendance for this user to calculate real streak
     const allAttendanceRows = await this.db.query(
       'SELECT date FROM student_attendance WHERE student_id = ? ORDER BY date DESC',
       [studentId],
     );
 
-    const attendanceStrs = allAttendanceRows.map((r: any) => {
-      const d = typeof r.date === 'string' ? new Date(r.date) : r.date;
-      return toDateStr(d);
-    });
+    const attendanceStrs = allAttendanceRows.map(
+      (r: { date: string | Date }) => {
+        const d = typeof r.date === 'string' ? new Date(r.date) : r.date;
+        return toDateStr(d);
+      },
+    );
     const uniqueAttendanceStrs = [...new Set(attendanceStrs)];
 
     let currentStreak = 0;
@@ -363,11 +433,10 @@ export class DashboardService {
       }
     }
 
-    // Now build result array for current month
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
 
-    const result: any[] = [];
+    const result: Record<string, unknown>[] = [];
     const daysInMonth = lastDay.getDate();
 
     for (let i = 1; i <= daysInMonth; i++) {
@@ -383,7 +452,7 @@ export class DashboardService {
       });
     }
 
-    const startEmptyDays = firstDay.getDay(); // 0 (Sun) to 6 (Sat)
+    const startEmptyDays = firstDay.getDay();
     const endEmptyDays = (7 - ((startEmptyDays + daysInMonth) % 7)) % 7;
 
     const prevMonthLastDay = new Date(year, month, 0).getDate();
@@ -423,7 +492,6 @@ export class DashboardService {
   }
 
   async checkInStudent(studentId: string) {
-    // Check if already checked in today
     const checkSql =
       'SELECT * FROM student_attendance WHERE student_id = ? AND date = CURDATE()';
     const existing = await this.db.query(checkSql, [studentId]);
@@ -433,15 +501,12 @@ export class DashboardService {
 
     const id = uuidv4();
 
-    // Insert attendance
     const insertSql =
       'INSERT INTO student_attendance (id, student_id, date, xp_earned) VALUES (?, ?, CURDATE(), 50)';
     await this.db.query(insertSql, [id, studentId]);
 
-    // Update streak based on the new logic!
     const attendanceData = await this.getStudentAttendance(studentId);
 
-    // Update Daily Quest Progress for check-in
     await this.updateQuestProgress(studentId, 'daily_checkin', 1).catch(
       console.error,
     );
@@ -454,7 +519,6 @@ export class DashboardService {
   }
 
   async getStudentVocabulary(studentId: string) {
-    // Source 1: words student added themselves
     const customWordsSql = `
       SELECT 
         id,
@@ -469,8 +533,6 @@ export class DashboardService {
       WHERE student_id = ?
     `;
 
-    // Source 2: teacher's flashcard words that student has STUDIED (has progress record)
-    // AND has starred (marked with *)
     const starredSql = `
       SELECT 
         sfp.flashcard_id as id,
@@ -546,7 +608,6 @@ export class DashboardService {
       exampleSentence || null,
     ]);
 
-    // Update daily quest progress if applicable
     await this.updateQuestProgress(studentId, 'add_custom_words', 1).catch(
       console.error,
     );
@@ -576,7 +637,6 @@ export class DashboardService {
   }
 
   async getVocabularyStudyCards(studentId: string) {
-    // Custom words added by student (no audio/flashcard progress tracking)
     const customSql = `
       SELECT 
         id,
@@ -591,7 +651,6 @@ export class DashboardService {
       WHERE student_id = ?
     `;
 
-    // Full flashcard data for starred teacher words
     const starredSql = `
       SELECT 
         f.id,

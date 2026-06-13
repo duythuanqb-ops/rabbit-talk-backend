@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import {
   BadRequestException,
   NotFoundException,
@@ -9,6 +8,7 @@ import {
   CreateUserDto,
   UpdateProfileDto,
   RegisterTeacherDto,
+  UpdatePasswordDto,
 } from '../dto/user.dto';
 import { UserRepository } from '../repositories/user.repository';
 import {
@@ -45,7 +45,7 @@ export class UserService {
         ...data,
         password: undefined,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duplicateMessage = parseDuplicateKeyError(error);
       if (duplicateMessage) {
         throw new BadRequestException(duplicateMessage);
@@ -62,38 +62,32 @@ export class UserService {
     avatarUrl?: string;
   }) {
     const userUuid = randomUUID();
-    // generate a random username based on email
+
     const username =
       data.email.split('@')[0] + '_' + Math.floor(Math.random() * 10000);
-    // set a default date of birth for google users, e.g. 2000-01-01
+
     const dateOfBirth = '2000-01-01';
 
     try {
-      const result = await this.userRepository.create(
+      await this.userRepository.create(
         userUuid,
         username,
         data.email,
         data.firstName,
         data.lastName,
         dateOfBirth,
-        null, // No password for Google users
+        null,
         data.googleId,
         data.avatarUrl || null,
         'google',
       );
 
-      return {
-        id: result.insertId,
-        uuid: userUuid,
-        username,
-        email: data.email,
-        first_name: data.firstName,
-        last_name: data.lastName,
-        date_of_birth: dateOfBirth,
-        avatar_url: data.avatarUrl,
-        auth_provider: 'google',
-      };
-    } catch (error: any) {
+      const createdUser = await this.userRepository.findByUuid(userUuid);
+      if (!createdUser) {
+        throw new Error('Failed to retrieve newly created user');
+      }
+      return createdUser;
+    } catch (error: unknown) {
       const duplicateMessage = parseDuplicateKeyError(error);
       if (duplicateMessage) {
         throw new BadRequestException(duplicateMessage);
@@ -126,19 +120,13 @@ export class UserService {
     return this.userRepository.findByUuid(uuid);
   }
 
-  /**
-   * Generates a 6-digit OTP, stores it with a 5-minute expiry, and returns the code.
-   */
   async initiateEmailVerification(uuid: string): Promise<string> {
-    const otp = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
     await this.userRepository.setEmailVerificationToken(uuid, otp, expiresAt);
     return otp;
   }
 
-  /**
-   * Verifies the OTP submitted by an authenticated user.
-   */
   async verifyEmailOtp(
     uuid: string,
     code: string,
@@ -160,6 +148,13 @@ export class UserService {
       };
     }
 
+    if (!user.email_verification_expires) {
+      return {
+        success: false,
+        message: 'Verification code has expired. Please request a new one.',
+      };
+    }
+
     const expires = new Date(user.email_verification_expires);
     if (expires < new Date()) {
       return {
@@ -177,7 +172,6 @@ export class UserService {
   }
 
   async updateProfile(uuid: string, dto: UpdateProfileDto) {
-    // Check if email is being updated and already exists
     if (dto.email) {
       const existingUser = await this.userRepository.findByEmailOrUsername(
         dto.email,
@@ -196,11 +190,10 @@ export class UserService {
     return this.userRepository.findByUuid(uuid);
   }
 
-  async updatePassword(uuid: string, dto: any) {
+  async updatePassword(uuid: string, dto: UpdatePasswordDto) {
     const user = await this.userRepository.findByUuid(uuid);
     if (!user) throw new NotFoundException('User not found');
 
-    // Check current password
     const userWithPassword = await this.userRepository.findByEmailOrUsername(
       user.email,
     );
@@ -270,14 +263,13 @@ export class UserService {
       );
       if (currentExpiresAt > new Date()) {
         if (!forceResend) {
-          // Do not throw error, just return the existing token so controller knows not to send email
           return { otp: existingResetInfo.password_reset_token, isNew: false };
         }
       }
     }
 
-    const otp = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
     await this.userRepository.setPasswordResetToken(user.email, otp, expiresAt);
     return { otp, isNew: true };
   }
@@ -296,6 +288,13 @@ export class UserService {
       return {
         success: false,
         message: 'No password reset code found. Please request a new one.',
+      };
+    }
+
+    if (!user.password_reset_expires) {
+      return {
+        success: false,
+        message: 'Reset code has expired. Please request a new one.',
       };
     }
 

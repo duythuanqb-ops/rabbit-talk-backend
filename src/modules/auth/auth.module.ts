@@ -19,7 +19,9 @@ import config from '../../config';
     PassportModule,
     JwtModule.register({
       secret: config.jwt.secret,
-      signOptions: { expiresIn: config.jwt.accessExpiration as any },
+      signOptions: {
+        expiresIn: config.jwt.accessExpiration as never,
+      },
     }),
   ],
   providers: [AuthService, LocalStrategy, JwtStrategy, RefreshTokenRepository],

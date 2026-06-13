@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import {
   Controller,
   Get,
@@ -22,7 +21,10 @@ export class FriendController {
   constructor(private readonly friendService: FriendService) {}
 
   @Post('request')
-  async sendRequest(@Request() req, @Body() dto: SendRequestDto) {
+  async sendRequest(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Body() dto: SendRequestDto,
+  ) {
     return await this.friendService.sendFriendRequest(
       req.user.uuid,
       dto.receiverIdentifier,
@@ -30,13 +32,15 @@ export class FriendController {
   }
 
   @Get('requests/pending')
-  async getPendingRequests(@Request() req) {
+  async getPendingRequests(
+    @Request() req: { user: { uuid: string; role?: string } },
+  ): Promise<unknown[]> {
     return await this.friendService.getPendingRequests(req.user.uuid);
   }
 
   @Patch('requests/:id')
   async respondRequest(
-    @Request() req,
+    @Request() req: { user: { uuid: string; role?: string } },
     @Param('id') requestId: string,
     @Body() dto: RespondRequestDto,
   ) {
@@ -48,17 +52,25 @@ export class FriendController {
   }
 
   @Get()
-  async getFriends(@Request() req) {
+  async getFriends(
+    @Request() req: { user: { uuid: string; role?: string } },
+  ): Promise<unknown[]> {
     return await this.friendService.getFriends(req.user.uuid);
   }
 
   @Delete(':friendUuid')
-  async unfriend(@Request() req, @Param('friendUuid') friendUuid: string) {
+  async unfriend(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Param('friendUuid') friendUuid: string,
+  ) {
     return await this.friendService.unfriend(req.user.uuid, friendUuid);
   }
 
   @Get('search')
-  async searchUsers(@Request() req, @Query('q') query: string) {
+  async searchUsers(
+    @Request() req: { user: { uuid: string; role?: string } },
+    @Query('q') query: string,
+  ): Promise<unknown[]> {
     return await this.friendService.searchUsers(req.user.uuid, query || '');
   }
 }

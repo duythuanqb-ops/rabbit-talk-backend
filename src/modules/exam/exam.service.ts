@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {
   Injectable,
   Logger,
@@ -7,6 +6,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
+import {
+  ExamRow,
+  ExamQuestionRow,
+  StudentExamAttemptRow,
+  FlashcardRow,
+  GroupRow,
+} from '../../database/database.types';
+import { Request } from 'express';
 import { GeminiService } from '../flashcard/services/gemini.service';
 import { DictionaryService } from '../flashcard/services/dictionary.service';
 import { DashboardService } from '../dashboard/dashboard.service';
@@ -54,10 +61,10 @@ export class ExamService {
     private readonly dashboardService: DashboardService,
   ) {}
 
-  getProxyAudioUrl(req: any, originalUrl: string | null): string | null {
+  getProxyAudioUrl(req: Request, originalUrl: string | null): string | null {
     if (!originalUrl) return null;
     if (originalUrl.includes('/proxy-audio?url=')) return originalUrl;
-    const protocol = (req.protocol as string) || 'http';
+    const protocol = req.protocol || 'http';
     const host = req.get('host') as string;
     return `${protocol}://${host}/api/v1/proxy-audio?url=${encodeURIComponent(originalUrl)}`;
   }
@@ -66,13 +73,18 @@ export class ExamService {
     return this.dictionary.lookup(word);
   }
 
-  async generateQuestions(items: string[], req: any): Promise<ExamQuestion[]> {
+  async generateQuestions(
+    items: (string | Partial<FlashcardRow>)[],
+    req: Request,
+  ): Promise<ExamQuestion[]> {
     let questions: ExamQuestion[] | null = null;
     try {
-      questions = await this.gemini.generateExamQuestions(items);
-    } catch (e: any) {
+      questions = await this.gemini.generateExamQuestions(
+        items.map((i) => (typeof i === 'object' ? i.word || '' : i)),
+      );
+    } catch (e: unknown) {
       this.logger.warn(
-        `Gemini generation failed: ${e.message}. Using backend fallback...`,
+        `Gemini generation failed: ${(e as Error).message}. Using backend fallback...`,
       );
     }
 
@@ -140,9 +152,7 @@ export class ExamService {
             existingMatching.options = Array.from(new Set(allOptions)).sort(
               () => Math.random() - 0.5,
             );
-          } catch {
-            // Keep the first matching card if JSON parse fails
-          }
+          } catch {}
         }
       } else {
         result.push(q);
@@ -152,13 +162,12 @@ export class ExamService {
   }
 
   async generateBackendFallbackQuestions(
-    items: string[],
+    items: (string | Partial<FlashcardRow>)[],
   ): Promise<ExamQuestion[]> {
     const qs: ExamQuestion[] = [];
 
-    // Process single word questions (listening, spelling, situation)
     for (const rawItem of items) {
-      const item: any = rawItem;
+      const item = typeof rawItem === 'object' ? rawItem : { word: rawItem };
       try {
         const isObj = typeof item === 'object' && item !== null;
         const word = isObj ? String(item.word || '') : String(item);
@@ -167,10 +176,9 @@ export class ExamService {
 
         if (!word) continue;
 
-        let dictRes: any = null;
         if (!meaning || !example) {
           try {
-            dictRes = await this.dictionary.lookup(cleanWord(word));
+            const dictRes = await this.dictionary.lookup(cleanWord(word));
             if (dictRes) {
               if (!meaning) meaning = dictRes.meaning;
               if (!example) example = dictRes.exampleSentence;
@@ -184,9 +192,6 @@ export class ExamService {
         }
         if (!meaning) meaning = word;
 
-        // 1. Matching (handled in chunks after this loop)
-
-        // 2. Listening
         const correct = word;
         const opt1 = word + 'e';
         const opt2 = word.replace(/[aeiou]/g, 'i');
@@ -206,7 +211,6 @@ export class ExamService {
           correct_answer: correct,
         });
 
-        // 3. Spelling
         qs.push({
           word,
           type: 'spelling',
@@ -215,16 +219,14 @@ export class ExamService {
           correct_answer: word,
         });
 
-        // 4. Situation — context-based question (no blanks / underscores)
         const questionText = example
           ? `Read the situation: "${example}" — Which word best describes this context?`
           : `Which English word matches this description: "${meaning}"?`;
 
-        // Build distractor pool from other items in the vocabulary list for variety
         const distractorPool = items
           .map((r) =>
             typeof r === 'object' && r !== null
-              ? String((r as any).word || '')
+              ? String(r.word || '')
               : String(r),
           )
           .filter((w) => w && w.toLowerCase() !== word.toLowerCase());
@@ -245,18 +247,17 @@ export class ExamService {
         });
       } catch {
         this.logger.error(
-          `Error generating backend fallback question for item: ${item}`,
+          `Error generating backend fallback question for item: ${JSON.stringify(item)}`,
         );
       }
     }
 
-    // Generate ONE single Matching Question for all items
     const correctAnswerMap: Record<string, string> = {};
     const optionsArr: string[] = [];
     const wordsArr: string[] = [];
 
     for (const rawItem of items) {
-      const item: any = rawItem;
+      const item = typeof rawItem === 'object' ? rawItem : { word: rawItem };
       const isObj = typeof item === 'object' && item !== null;
       const word = isObj ? String(item.word || '') : String(item);
       if (!word) continue;
@@ -271,7 +272,6 @@ export class ExamService {
           .filter(Boolean);
         if (parts.length > 0) synonym = parts[0];
       } else {
-        // If no raw synonyms, try dictionary lookup
         try {
           const dictRes = await this.dictionary.lookup(word);
           if (dictRes && dictRes.synonyms) {
@@ -306,7 +306,7 @@ export class ExamService {
     return qs;
   }
 
-  async createExam(teacherId: string, data: any): Promise<Exam> {
+  async createExam(teacherId: string, data: Partial<Exam>): Promise<Exam> {
     const {
       groupId,
       title,
@@ -325,7 +325,7 @@ export class ExamService {
       questions: ExamQuestion[];
     };
     const questions = this.consolidateMatchingQuestions(rawQuestions || []);
-    const groups = await this.db.query(
+    const groups = await this.db.query<GroupRow>(
       'SELECT created_by FROM `groups` WHERE id = ?',
       [groupId],
     );
@@ -385,9 +385,7 @@ export class ExamService {
           if (urlParam) {
             rawAudioUrl = urlParam;
           }
-        } catch {
-          // Ignore invalid URL parsing
-        }
+        } catch {}
       }
 
       await this.db.execute(
@@ -409,7 +407,7 @@ export class ExamService {
     return this.getExamById(examId);
   }
 
-  async getMyExams(userId: string, isTeacher: boolean): Promise<any[]> {
+  async getMyExams(userId: string, isTeacher: boolean): Promise<ExamRow[]> {
     if (isTeacher) {
       const sql = `
         SELECT e.*, g.title as group_name,
@@ -420,7 +418,7 @@ export class ExamService {
         WHERE e.teacher_id = ?
         ORDER BY e.created_at DESC
       `;
-      return this.db.query(sql, [userId]);
+      return this.db.query<ExamRow>(sql, [userId]);
     } else {
       const sql = `
         SELECT e.*, g.title as group_name,
@@ -433,7 +431,7 @@ export class ExamService {
         WHERE gm.user_id = ? AND e.is_published = 1
         ORDER BY e.created_at DESC
       `;
-      return this.db.query(sql, [userId, userId, userId]);
+      return this.db.query<ExamRow>(sql, [userId, userId, userId]);
     }
   }
 
@@ -441,7 +439,7 @@ export class ExamService {
     groupId: string,
     userId: string,
     isTeacher: boolean,
-  ): Promise<any[]> {
+  ): Promise<ExamRow[]> {
     if (isTeacher) {
       const sql = `
         SELECT e.*,
@@ -451,7 +449,7 @@ export class ExamService {
         WHERE e.group_id = ?
         ORDER BY e.created_at DESC
       `;
-      return this.db.query(sql, [groupId]);
+      return this.db.query<ExamRow>(sql, [groupId]);
     } else {
       const sql = `
         SELECT e.*,
@@ -462,47 +460,48 @@ export class ExamService {
         WHERE e.group_id = ? AND e.is_published = 1
         ORDER BY e.created_at DESC
       `;
-      return this.db.query(sql, [userId, userId, groupId]);
+      return this.db.query<ExamRow>(sql, [userId, userId, groupId]);
     }
   }
 
   async getExamById(examId: string): Promise<Exam> {
-    const exams = await this.db.query('SELECT * FROM exams WHERE id = ?', [
-      examId,
-    ]);
+    const exams = await this.db.query<ExamRow>(
+      'SELECT * FROM exams WHERE id = ?',
+      [examId],
+    );
     if (!exams.length) {
       throw new NotFoundException('Exam not found');
     }
-    const rawQuestions = await this.db.query(
+    const rawQuestions = await this.db.query<ExamQuestionRow>(
       'SELECT id, word, type, question_text, options, correct_answer, audio_url FROM exam_questions WHERE exam_id = ?',
       [examId],
     );
 
-    const questions: ExamQuestion[] = rawQuestions.map((q: any) => {
+    const questions: ExamQuestion[] = rawQuestions.map((q: ExamQuestionRow) => {
       let parsedOptions: string[] | null = null;
       if (q.options) {
         try {
-          parsedOptions = JSON.parse(q.options as string) as string[];
+          parsedOptions = JSON.parse(q.options) as string[];
         } catch {
-          parsedOptions = q.options as string[];
+          parsedOptions = q.options as unknown as string[];
         }
       }
       return {
-        id: q.id as string,
-        word: q.word as string,
-        type: q.type,
-        question_text: q.question_text as string,
+        id: q.id,
+        word: q.word,
+        type: q.type as ExamQuestion['type'],
+        question_text: q.question_text,
         options: parsedOptions,
-        correct_answer: q.correct_answer as string,
+        correct_answer: q.correct_answer,
         audio_url: q.audio_url || null,
       };
     });
 
     return {
-      id: exams[0].id as string,
-      group_id: exams[0].group_id as string,
-      teacher_id: exams[0].teacher_id as string,
-      title: exams[0].title as string,
+      id: exams[0].id,
+      group_id: exams[0].group_id,
+      teacher_id: exams[0].teacher_id,
+      title: exams[0].title,
       description: exams[0].description || null,
       is_published: !!exams[0].is_published,
       created_at: exams[0].created_at
@@ -522,7 +521,7 @@ export class ExamService {
   async updateExam(
     examId: string,
     teacherId: string,
-    data: any,
+    data: Partial<ExamRow>,
   ): Promise<Exam> {
     const {
       title,
@@ -541,7 +540,7 @@ export class ExamService {
     };
     const questions = this.consolidateMatchingQuestions(rawQuestions || []);
 
-    const exams = await this.db.query(
+    const exams = await this.db.query<ExamRow>(
       'SELECT teacher_id FROM exams WHERE id = ?',
       [examId],
     );
@@ -571,7 +570,6 @@ export class ExamService {
       ],
     );
 
-    // Delete existing questions and insert updated questions
     await this.db.execute('DELETE FROM exam_questions WHERE exam_id = ?', [
       examId,
     ]);
@@ -588,9 +586,7 @@ export class ExamService {
           if (urlParam) {
             rawAudioUrl = urlParam;
           }
-        } catch {
-          // Ignore
-        }
+        } catch {}
       } else if (!rawAudioUrl && q.type === 'listening' && q.word) {
         try {
           const cleanedWord = cleanWord(q.word);
@@ -598,9 +594,7 @@ export class ExamService {
           if (dictRes && dictRes.audioUrl) {
             rawAudioUrl = dictRes.audioUrl;
           }
-        } catch {
-          // Ignore
-        }
+        } catch {}
       }
 
       await this.db.execute(
@@ -627,7 +621,7 @@ export class ExamService {
     teacherId: string,
     isPublished: boolean,
   ) {
-    const exams = await this.db.query(
+    const exams = await this.db.query<ExamRow>(
       'SELECT teacher_id FROM exams WHERE id = ?',
       [examId],
     );
@@ -647,7 +641,7 @@ export class ExamService {
   }
 
   async enrichListeningAudioUrls() {
-    const questions = await this.db.query(
+    const questions = await this.db.query<ExamQuestionRow>(
       `SELECT id, word FROM exam_questions WHERE type = 'listening' AND (audio_url IS NULL OR audio_url = '')`,
       [],
     );
@@ -682,7 +676,7 @@ export class ExamService {
   }
 
   async deleteExam(examId: string, teacherId: string) {
-    const exams = await this.db.query(
+    const exams = await this.db.query<ExamRow>(
       'SELECT teacher_id FROM exams WHERE id = ?',
       [examId],
     );
@@ -765,7 +759,6 @@ export class ExamService {
       ],
     );
 
-    // Reward XP based on score (e.g. 10 XP per correct answer)
     const xpEarned = score * 10;
     if (xpEarned > 0) {
       await this.db.execute(`UPDATE users SET xp = xp + ? WHERE uuid = ?`, [
@@ -774,12 +767,10 @@ export class ExamService {
       ]);
     }
 
-    // Daily Quest logic for "Take Exam"
     await this.dashboardService
       .updateQuestProgress(studentId, 'take_exam', 1)
       .catch(console.error);
 
-    // Daily Quest logic for "Perfect Exam"
     if (score === questions.length && questions.length > 0) {
       await this.dashboardService
         .updateQuestProgress(studentId, 'perfect_exam', 1)
@@ -807,7 +798,7 @@ export class ExamService {
       completed_at: string;
     }[]
   > {
-    const attempts = await this.db.query(
+    const attempts = await this.db.query<StudentExamAttemptRow>(
       'SELECT id, score, total_questions, answers, completed_at FROM student_exam_attempts WHERE exam_id = ? AND student_id = ? ORDER BY completed_at DESC',
       [examId, studentId],
     );
