@@ -107,11 +107,13 @@ export class AuthController {
         config.frontendUrl.includes('localhost') ||
         config.frontendUrl.includes('127.0.0.1');
       const secure = isProduction && !isLocalhost;
+      const cookieDomain = isProduction ? '.ribbittalk.com' : undefined;
 
       res.cookie('access_token', accessToken, {
         httpOnly: true,
         secure: secure,
         sameSite: 'lax',
+        domain: cookieDomain,
         maxAge: 15 * 60 * 1000,
       });
 
@@ -151,11 +153,13 @@ export class AuthController {
       config.frontendUrl.includes('127.0.0.1');
 
     const secure = isProduction && !isLocalhost;
+    const cookieDomain = isProduction ? '.ribbittalk.com' : undefined;
 
     res.cookie('access_token', accessToken, {
       httpOnly: true,
       secure: secure,
       sameSite: 'lax',
+      domain: cookieDomain,
       maxAge: 15 * 60 * 1000,
     });
 
@@ -163,6 +167,7 @@ export class AuthController {
       httpOnly: true,
       secure: secure,
       sameSite: 'lax',
+      domain: cookieDomain,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
   }
