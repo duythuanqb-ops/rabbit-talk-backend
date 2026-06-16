@@ -93,8 +93,7 @@ export class AuthController {
   ) {
     const refreshToken = req.cookies['refresh_token'];
     if (!refreshToken) {
-      res.clearCookie('access_token');
-      res.clearCookie('refresh_token');
+      this.clearTokenCookies(res);
       throw new UnauthorizedException('Refresh token missing');
     }
 
@@ -122,8 +121,7 @@ export class AuthController {
         user,
       };
     } catch {
-      res.clearCookie('access_token');
-      res.clearCookie('refresh_token');
+      this.clearTokenCookies(res);
       throw new UnauthorizedException('Session expired or invalid');
     }
   }
@@ -137,9 +135,15 @@ export class AuthController {
     if (refreshToken) {
       await this.authService.revokeRefreshToken(refreshToken);
     }
-    res.clearCookie('access_token');
-    res.clearCookie('refresh_token');
+    this.clearTokenCookies(res);
     return { message: 'Logged out successfully' };
+  }
+
+  private clearTokenCookies(res: Response) {
+    const cookieDomain =
+      config.nodeEnv === 'production' ? '.ribbittalk.com' : undefined;
+    res.clearCookie('access_token', { domain: cookieDomain });
+    res.clearCookie('refresh_token', { domain: cookieDomain });
   }
 
   private setTokenCookies(
