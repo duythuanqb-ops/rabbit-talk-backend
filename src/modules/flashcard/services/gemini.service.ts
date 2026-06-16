@@ -44,7 +44,12 @@ export interface ExamQuestion {
   correct_answer: string;
 }
 
-const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+const GEMINI_MODELS = [
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+];
 
 const JSON_GENERATION_CONFIG = { responseMimeType: 'application/json' };
 
